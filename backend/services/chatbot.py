@@ -325,12 +325,17 @@ class AtmosChatbotService:
             else:
                 lc_history.append(AIMessage(content=content))
 
-        response = await chain.ainvoke({
-            "context": context,
-            "history": lc_history,
-            "message": message
-        })
-        reply_text = response.content
+        try:
+            response = await chain.ainvoke({
+                "context": context,
+                "history": lc_history,
+                "message": message
+            })
+            reply_text = response.content
+        except Exception as e:
+            # Fallback to mock if LLM fails (e.g. invalid key, quota exceeded)
+            print(f"LLM generation failed: {e}")
+            reply_text = _match_response(message, language)
 
         cls.save_message(conversation_id, "human", message)
         cls.save_message(conversation_id, "ai", reply_text)
