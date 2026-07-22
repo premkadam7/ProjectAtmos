@@ -1,0 +1,965 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13321477961556,
+          28.62599178872509
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 1 Academy",
+        "type": "school",
+        "ward_id": "CANT_1",
+        "ward_name": "DELHI CANTT CHARGE 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.1293113017917,
+          28.624413404579823
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 1 Nursing Home",
+        "type": "hospital",
+        "ward_id": "CANT_1",
+        "ward_name": "DELHI CANTT CHARGE 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13015960845037,
+          28.62650397537684
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 1 Senior Citizen Home",
+        "type": "elderly_care",
+        "ward_id": "CANT_1",
+        "ward_name": "DELHI CANTT CHARGE 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.14111485614725,
+          28.609718251116753
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 2 International School",
+        "type": "school",
+        "ward_id": "CANT_2",
+        "ward_name": "DELHI CANTT CHARGE 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.14052198176547,
+          28.607949059522852
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 2 Super Speciality Hospital",
+        "type": "hospital",
+        "ward_id": "CANT_2",
+        "ward_name": "DELHI CANTT CHARGE 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.1397453147285,
+          28.608064391544577
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 2 Graceful Living Elderly Care",
+        "type": "elderly_care",
+        "ward_id": "CANT_2",
+        "ward_name": "DELHI CANTT CHARGE 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.1352399424124,
+          28.563784427676282
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 4 Model School",
+        "type": "school",
+        "ward_id": "CANT_4",
+        "ward_name": "DELHI CANTT CHARGE 4"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13751363867804,
+          28.565007140743443
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 4 Nursing Home",
+        "type": "hospital",
+        "ward_id": "CANT_4",
+        "ward_name": "DELHI CANTT CHARGE 4"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13911929763118,
+          28.56279600137165
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 4 Sunset Retreat",
+        "type": "elderly_care",
+        "ward_id": "CANT_4",
+        "ward_name": "DELHI CANTT CHARGE 4"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13278051381928,
+          28.573610406636725
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 5 Academy",
+        "type": "school",
+        "ward_id": "CANT_5",
+        "ward_name": "DELHI CANTT CHARGE 5"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13380552487705,
+          28.574938917754917
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 5 Super Speciality Hospital",
+        "type": "hospital",
+        "ward_id": "CANT_5",
+        "ward_name": "DELHI CANTT CHARGE 5"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.13252669264271,
+          28.573524470441253
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 5 Sunset Retreat",
+        "type": "elderly_care",
+        "ward_id": "CANT_5",
+        "ward_name": "DELHI CANTT CHARGE 5"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.1021279498493,
+          28.57481847734443
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 6 Academy",
+        "type": "school",
+        "ward_id": "CANT_6",
+        "ward_name": "DELHI CANTT CHARGE 6"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.10163068334099,
+          28.572994669213905
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 6 Health Center",
+        "type": "hospital",
+        "ward_id": "CANT_6",
+        "ward_name": "DELHI CANTT CHARGE 6"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.10441932932036,
+          28.571745041443027
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 6 Hope Assisted Living",
+        "type": "elderly_care",
+        "ward_id": "CANT_6",
+        "ward_name": "DELHI CANTT CHARGE 6"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.11116126124082,
+          28.596609401504523
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 7 Academy",
+        "type": "school",
+        "ward_id": "CANT_7",
+        "ward_name": "DELHI CANTT CHARGE 7"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.11156654460933,
+          28.595505633630378
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 7 Apex Clinic",
+        "type": "hospital",
+        "ward_id": "CANT_7",
+        "ward_name": "DELHI CANTT CHARGE 7"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.11471831820256,
+          28.59776666081945
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 7 Sunset Retreat",
+        "type": "elderly_care",
+        "ward_id": "CANT_7",
+        "ward_name": "DELHI CANTT CHARGE 7"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.12645689476246,
+          28.602197121087663
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 8 Model School",
+        "type": "school",
+        "ward_id": "CANT_8",
+        "ward_name": "DELHI CANTT CHARGE 8"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.12898442463869,
+          28.60231384685704
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 8 Health Center",
+        "type": "hospital",
+        "ward_id": "CANT_8",
+        "ward_name": "DELHI CANTT CHARGE 8"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.1267306685402,
+          28.60105742547342
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 8 Hope Assisted Living",
+        "type": "elderly_care",
+        "ward_id": "CANT_8",
+        "ward_name": "DELHI CANTT CHARGE 8"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.14799164388761,
+          28.593741304054078
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 3 Convent School",
+        "type": "school",
+        "ward_id": "CANT_3",
+        "ward_name": "DELHI CANTT CHARGE 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.14599842402123,
+          28.596002990958702
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 3 Apex Clinic",
+        "type": "hospital",
+        "ward_id": "CANT_3",
+        "ward_name": "DELHI CANTT CHARGE 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.14909968494922,
+          28.595634036228983
+        ]
+      },
+      "properties": {
+        "name": "DELHI CANTT CHARGE 3 Senior Citizen Home",
+        "type": "elderly_care",
+        "ward_id": "CANT_3",
+        "ward_name": "DELHI CANTT CHARGE 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.23274281132471,
+          28.618270287053214
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 1 Model School",
+        "type": "school",
+        "ward_id": "NDMC_1",
+        "ward_name": "NDMC CHARGE 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.23647324542567,
+          28.61443778761896
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 1 Health Center",
+        "type": "hospital",
+        "ward_id": "NDMC_1",
+        "ward_name": "NDMC CHARGE 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.23358131561226,
+          28.616094711026456
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 1 Senior Citizen Home",
+        "type": "elderly_care",
+        "ward_id": "NDMC_1",
+        "ward_name": "NDMC CHARGE 1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.20614101299252,
+          28.638157706781577
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 2 Academy",
+        "type": "school",
+        "ward_id": "NDMC_2",
+        "ward_name": "NDMC CHARGE 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.20860358834516,
+          28.636125225686797
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 2 Health Center",
+        "type": "hospital",
+        "ward_id": "NDMC_2",
+        "ward_name": "NDMC CHARGE 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.20945809373029,
+          28.63908101973356
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 2 Senior Citizen Home",
+        "type": "elderly_care",
+        "ward_id": "89",
+        "ward_name": "PAHAR GANJ"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.18794229548227,
+          28.617137858409855
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 3 Public School",
+        "type": "school",
+        "ward_id": "NDMC_3",
+        "ward_name": "NDMC CHARGE 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.18982771137713,
+          28.61980647934564
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 3 Nursing Home",
+        "type": "hospital",
+        "ward_id": "NDMC_3",
+        "ward_name": "NDMC CHARGE 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.18786236242599,
+          28.621513040339593
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 3 Nightingale Care",
+        "type": "elderly_care",
+        "ward_id": "NDMC_3",
+        "ward_name": "NDMC CHARGE 3"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21510039318444,
+          28.623664498302478
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 4 Public School",
+        "type": "school",
+        "ward_id": "NDMC_4",
+        "ward_name": "NDMC CHARGE 4"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21317228231466,
+          28.621584073834182
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 4 Nursing Home",
+        "type": "hospital",
+        "ward_id": "NDMC_4",
+        "ward_name": "NDMC CHARGE 4"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21278483757989,
+          28.62166750973137
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 4 Hope Assisted Living",
+        "type": "elderly_care",
+        "ward_id": "NDMC_4",
+        "ward_name": "NDMC CHARGE 4"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21773444978241,
+          28.601177656942436
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 5 Convent School",
+        "type": "school",
+        "ward_id": "NDMC_5",
+        "ward_name": "NDMC CHARGE 5"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.2214274259742,
+          28.604499710002997
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 5 Health Center",
+        "type": "hospital",
+        "ward_id": "NDMC_5",
+        "ward_name": "NDMC CHARGE 5"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.22118890991455,
+          28.60030980135554
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 5 Graceful Living Elderly Care",
+        "type": "elderly_care",
+        "ward_id": "NDMC_5",
+        "ward_name": "NDMC CHARGE 5"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.20297609234723,
+          28.570713803765106
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 7 Convent School",
+        "type": "school",
+        "ward_id": "NDMC_7",
+        "ward_name": "NDMC CHARGE 7"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.20411749858853,
+          28.571508410967002
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 7 Super Speciality Hospital",
+        "type": "hospital",
+        "ward_id": "NDMC_7",
+        "ward_name": "NDMC CHARGE 7"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.20543259241167,
+          28.570443088332418
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 7 Hope Assisted Living",
+        "type": "elderly_care",
+        "ward_id": "NDMC_7",
+        "ward_name": "NDMC CHARGE 7"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.19673849800765,
+          28.575782685908322
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 8 International School",
+        "type": "school",
+        "ward_id": "NDMC_8",
+        "ward_name": "NDMC CHARGE 8"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.19804758078972,
+          28.578338969210176
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 8 Health Center",
+        "type": "hospital",
+        "ward_id": "NDMC_8",
+        "ward_name": "NDMC CHARGE 8"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.19863645718954,
+          28.574896827221476
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 8 Graceful Living Elderly Care",
+        "type": "elderly_care",
+        "ward_id": "NDMC_8",
+        "ward_name": "NDMC CHARGE 8"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.19242140919785,
+          28.588304296827403
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 9 Public School",
+        "type": "school",
+        "ward_id": "NDMC_9",
+        "ward_name": "NDMC CHARGE 9"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.1930286356939,
+          28.588498822130916
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 9 General Hospital",
+        "type": "hospital",
+        "ward_id": "NDMC_9",
+        "ward_name": "NDMC CHARGE 9"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.19047843692974,
+          28.58911940008701
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 9 Senior Citizen Home",
+        "type": "elderly_care",
+        "ward_id": "NDMC_9",
+        "ward_name": "NDMC CHARGE 9"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21913721775203,
+          28.58490913742454
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 6 Academy",
+        "type": "school",
+        "ward_id": "NDMC_6",
+        "ward_name": "NDMC CHARGE 6"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21900789359688,
+          28.58493675181041
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 6 General Hospital",
+        "type": "hospital",
+        "ward_id": "NDMC_6",
+        "ward_name": "NDMC CHARGE 6"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.21814681327618,
+          28.58361901483212
+        ]
+      },
+      "properties": {
+        "name": "NDMC CHARGE 6 Nightingale Care",
+        "type": "elderly_care",
+        "ward_id": "NDMC_6",
+        "ward_name": "NDMC CHARGE 6"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.22742781622291,
+          28.659757349986968
+        ]
+      },
+      "properties": {
+        "name": "CHANDNI CHOWK Convent School",
+        "type": "school",
+        "ward_id": "80",
+        "ward_name": "CHANDNI CHOWK"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.22826103984313,
+          28.658690554190304
+        ]
+      },
+      "properties": {
+        "name": "CHANDNI CHOWK Apex Clinic",
+        "type": "hospital",
+        "ward_id": "80",
+        "ward_name": "CHANDNI CHOWK"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.22740799261153,
+          28.65962486841532
+        ]
+      },
+      "properties": {
+        "name": "CHANDNI CHOWK Hope Assisted Living",
+        "type": "elderly_care",
+        "ward_id": "80",
+        "ward_name": "CHANDNI CHOWK"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.23164886726546,
+          28.636788363718775
+        ]
+      },
+      "properties": {
+        "name": "MINTO ROAD International School",
+        "type": "school",
+        "ward_id": "81",
+        "ward_name": "MINTO ROAD"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.23311217699829,
+          28.63830255585051
+        ]
+      },
+      "properties": {
+        "name": "MINTO ROAD Health Center",
+        "type": "hospital",
+        "ward_id": "81",
+        "ward_name": "MINTO ROAD"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.23224126038525,
+          28.63412867802032
+        ]
+      },
+      "properties": {
+        "name": "MINTO ROAD Hope Assisted Living",
+        "type": "elderly_care",
+        "ward_id": "81",
+        "ward_name": "MINTO ROAD"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.2276330113715,
+          28.648067889375238
+        ]
+      },
+      "properties": {
+        "name": "KUCHA PANDIT International School",
+        "type": "school",
+        "ward_id": "82",
+        "ward_name": "KUCHA PANDIT"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.22320359258211,
+          28.646364386720197
+        ]
+      },
+      "properties": {
+        "name": "KUCHA PANDIT Nursing Home",
+        "type": "hospital",
+        "ward_id": "NDMC_2",
+        "ward_name": "NDMC CHARGE 2"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          77.22595357879065,
+          28.647965987270243
+        ]
+      },
+      "properties": {
+        "name": "KUCHA PANDIT Nightingale Care",
+        "type": "elderly_care",
+        "ward_id": "82",
+        "ward_name": "KUCHA PANDIT"
+      }
+    }
+  ]
+}
