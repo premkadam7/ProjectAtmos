@@ -604,14 +604,26 @@ export default function Home() {
   useEffect(() => {
     getForecast('delhi').then(d => {
       setData(d);
-      const worst = [...d.wards].sort((a, b) => b.current_aqi - a.current_aqi)[0];
-      setSelectedWard(worst);
+      if (d && d.wards && d.wards.length > 0) {
+        const worst = [...d.wards].sort((a, b) => b.current_aqi - a.current_aqi)[0];
+        setSelectedWard(worst);
+      }
+    }).catch(err => {
+      setData({ error: 'Failed to fetch' });
     });
   }, []);
 
   if (!data) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)' }}>
       Loading...
+    </div>
+  );
+  
+  if (data.error || !data.wards || data.wards.length === 0) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)', flexDirection: 'column', gap: '10px' }}>
+      <p style={{ fontSize: '18px', color: '#ef4444' }}>Error: Backend Data Not Available</p>
+      <p>The server is either still deploying the new datasets, or there is an API error.</p>
+      <p>Please wait 1-2 minutes and refresh the page.</p>
     </div>
   );
 
