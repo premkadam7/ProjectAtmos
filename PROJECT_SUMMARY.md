@@ -114,19 +114,9 @@ This creates a continuous city-wide pollution heatmap. The interpolation is clea
 - **Enforcement (`/enforce`)** — Command center for city administrators showing auto-generated tickets sorted by urgency. Each ticket shows real population affected, nearby schools/hospitals, and an ML-simulated AQI reduction badge
 - **Chatbot (`/chat` via landing page)** — Full interface for the Gemini-powered assistant
 
-## 5. Bugs Fixed During Development
 
-1. **299 AQI Flatline** — The model was predicting ~299 AQI for almost every ward. Root cause: mean imputation in `preprocess.py` was filling missing time-series data with the global average, causing the model to collapse to one value. Fix: switched to forward-fill and dropped empty timestamps.
 
-2. **Identical Enforcement Tickets** — The `/enforce` endpoint generated the same ticket for every ward. Fix: ensured SHAP feature importances were computed per-ward and used deterministic ward-based hashing for ticket IDs.
-
-3. **Missing Stations** — Punjabi Bagh and Shadipur failed during the initial API scrape. Fix: wrote `fetch_missing.py` to scrape them individually and appended ~35K rows to the raw cache without re-scraping the entire 2-year dataset.
-
-4. **AQI Formula Mismatch** — The inference code used a rough `pm25 * 2.0` approximation while training labels used the correct NAQI breakpoint formula. Fix: unified both to use the same piecewise breakpoint function.
-
-5. **Fake Enforcement Data** — Population and school/hospital counts on tickets were derived from string length of ward IDs. Fix: loaded real population CSV and real OSM vulnerable locations GeoJSON.
-
-## 6. Known Limitations (Be Honest About These)
+## 5. Known Limitations 
 
 - **Data resolution**: Open-Meteo serves CAMS global model data at ~40-45km resolution. Delhi fits within roughly one grid cell. This means our 29 "stations" share only 3 distinct pollutant time series. The model works, but true hyperlocal differentiation would require actual physical sensor feeds (e.g., CPCB live API).
 
@@ -138,12 +128,4 @@ This creates a continuous city-wide pollution heatmap. The interpolation is clea
 
 - **Delhi-only**: Ward boundaries, station lists, and GeoJSON are hardcoded for Delhi. Scaling to another city would require new data sources.
 
-## 7. Pitch Strategy
 
-When presenting to judges, hit these points:
-
-- **Predictive, not reactive** — We don't just show current AQI; we forecast 72 hours ahead using a real trained model with a measurable RMSE (29.90 vs 32.27 persistence baseline = 7.4% improvement)
-- **Source attribution** — We don't just say "it's polluted"; SHAP mathematically explains what factors are driving pollution in each specific ward
-- **Actionable intelligence** — We don't just provide data; we generate enforcement tickets with real population impact, nearby vulnerable locations, and ML-simulated intervention effects
-- **What-If simulator** — City officials can ask "what happens if we restrict traffic in this ward?" and get a real counterfactual from the ML model
-- **Spatial interpolation** — Nearest-neighbor interpolation fills the city-wide map from 29 stations, and it's transparently labeled as estimated where applicable
