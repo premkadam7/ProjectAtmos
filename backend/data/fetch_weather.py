@@ -21,6 +21,7 @@ def fetch_weather(start_date, end_date):
 
 if __name__ == "__main__":
     df = fetch_weather("2023-01-01", "2024-12-31")
-    os.makedirs("data/raw", exist_ok=True)
-    df.to_csv("data/raw/weather_delhi.csv", index=False)
-    print(f"Saved {len(df)} records to data/raw/weather_delhi.csv")
+    output_path = os.path.join("data_store", "cache", "weather_delhi.csv")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    df.to_csv(output_path, index=False)
+    print(f"Saved {len(df)} records to {output_path}")

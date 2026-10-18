@@ -7,6 +7,9 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+# Tests run offline against the bundled sample data, never the live APIs
+os.environ.setdefault("ATMOS_LIVE", "0")
+
 import pytest
 from fastapi.testclient import TestClient
 

@@ -40,21 +40,23 @@ DELHI_STATIONS = {
     "Ghaziabad Vasundhara": {"lat": 28.6603, "lon": 77.3573},
 }
 
-# Indian NAQI breakpoints for PM2.5 (µg/m³)
+# Indian NAQI breakpoints for PM2.5 (µg/m³): (conc_low, conc_high, index_low, index_high).
+# Bands are contiguous so fractional readings (e.g. 30.5) interpolate instead of
+# falling through the integer gaps of the published table.
 _NAQI_BREAKPOINTS = [
     (0, 30, 0, 50),
-    (31, 60, 51, 100),
-    (61, 90, 101, 200),
-    (91, 120, 201, 300),
-    (121, 250, 301, 400),
-    (250, 500, 401, 500),
+    (30, 60, 50, 100),
+    (60, 90, 100, 200),
+    (90, 120, 200, 300),
+    (120, 250, 300, 400),
+    (250, 500, 400, 500),
 ]
 
 def calculate_aqi_from_pm25(pm25: float) -> float:
     if pd.isna(pm25) or pm25 < 0:
         return float("nan")
     for c_low, c_high, i_low, i_high in _NAQI_BREAKPOINTS:
-        if c_low <= pm25 <= c_high:
+        if pm25 <= c_high:
             return round(((i_high - i_low) / (c_high - c_low)) * (pm25 - c_low) + i_low, 1)
     return 500.0
 

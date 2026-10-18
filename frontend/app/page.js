@@ -1,29 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { getForecast } from '@/lib/api';
+import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
+import { getAqiColor, getAqiLabel, SOURCE_INFO } from '@/lib/aqi';
 import Card from '@/components/common/Card';
 import CountUp from '@/components/common/CountUp';
-import HeroSection from '@/components/common/HeroSection';
+
+const PredictionMap = dynamic(() => import('@/components/common/PredictionMap'), {
+  ssr: false,
+  loading: () => <div className="skeleton" style={{ height: 560, borderRadius: 20 }} />,
+});
+
 const CHART_ACCENT = '#5cb9ad';
-
-function getAqiColor(aqi) {
-  if (aqi <= 50) return '#4ade80';
-  if (aqi <= 100) return '#a3e635';
-  if (aqi <= 200) return '#facc15';
-  if (aqi <= 300) return '#fb923c';
-  if (aqi <= 400) return '#f97316';
-  return '#ef4444';
-}
-
-function getAqiLabel(aqi) {
-  if (aqi <= 50) return 'Good';
-  if (aqi <= 100) return 'Satisfactory';
-  if (aqi <= 200) return 'Moderate';
-  if (aqi <= 300) return 'Poor';
-  if (aqi <= 400) return 'Very Poor';
-  return 'Severe';
-}
 
 function getAqiGradient(aqi) {
   if (aqi <= 50)  return 'linear-gradient(160deg, #04250f 0%, #16a34a 55%, #4ade80 100%)';
@@ -42,61 +31,55 @@ function colorForRelative(t) {
     { t: 0.75, c: [251, 146, 60] },
     { t: 1,    c: [239, 68, 68] },
   ];
+  const v = Math.max(0, Math.min(1, t));
   for (let i = 0; i < stops.length - 1; i++) {
-    if (t >= stops[i].t && t <= stops[i + 1].t) {
-      const localT = (t - stops[i].t) / (stops[i + 1].t - stops[i].t || 1);
-      const c = stops[i].c.map((v, idx) => Math.round(v + (stops[i + 1].c[idx] - v) * localT));
+    if (v >= stops[i].t && v <= stops[i + 1].t) {
+      const localT = (v - stops[i].t) / (stops[i + 1].t - stops[i].t || 1);
+      const c = stops[i].c.map((x, idx) => Math.round(x + (stops[i + 1].c[idx] - x) * localT));
       return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
     }
   }
   return `rgb(${stops[stops.length - 1].c.join(', ')})`;
 }
 
-function Sparkline({ values, color }) {
-  const W = 120, H = 32;
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const range = max - min || 1;
-  const pts = values.map((v, i) => {
-    const x = (i / (values.length - 1)) * W;
-    const y = H - ((v - min) / range) * H;
-    return `${x},${y}`;
-  }).join(' ');
-  return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ marginTop: '10px', opacity: 0.7 }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+// Measure a container so SVG charts draw at real pixel width (text stays a constant size)
+function useWidth(fallback = 640) {
+  const [el, setEl] = useState(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setWidth(Math.max(280, Math.round(entry.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [el]);
+  return [setEl, width];
 }
 
-function StatCard({ title, numericValue, decimals = 0, suffix = '', subtitle, color, icon, sparkValues, animOrder = 0 }) {
+function Skeleton({ height = 200, style = {} }) {
+  return <div className="skeleton" style={{ height, borderRadius: 16, ...style }} />;
+}
+
+function formatTime(iso, opts = { hour: 'numeric', minute: '2-digit', hour12: true }) {
+  return new Date(iso).toLocaleString('en-IN', opts);
+}
+
+/* ---------- Data source badge ---------- */
+function DataSourceBadge({ data }) {
+  if (!data?.data_source) return null;
+  const info = SOURCE_INFO[data.data_source] || SOURCE_INFO['offline-sample'];
+  const observed = formatTime(data.observed_at, { day: '2-digit', month: 'short', hour: 'numeric', hour12: true });
   return (
-    <Card className="stat-card stagger-in" style={{ flex: 1, animationDelay: `${animOrder * 0.08}s` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <p style={{ fontSize: '12px', color: 'var(--text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{title}</p>
-        {icon && (
-          <div style={{
-            width: '36px', height: '36px', borderRadius: '10px',
-            background: `${color}18`, display: 'flex',
-            alignItems: 'center', justifyContent: 'center', fontSize: '18px',
-          }}>
-            {icon}
-          </div>
-        )}
-      </div>
-      <p style={{ fontSize: '36px', fontWeight: '700', color: color || 'var(--text-primary)', lineHeight: 1, marginTop: '10px' }}>
-        <CountUp value={numericValue} decimals={decimals} suffix={suffix} />
-      </p>
-      {subtitle && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '5px' }}>{subtitle}</p>}
-      {sparkValues && <Sparkline values={sparkValues} color={color || CHART_ACCENT} />}
-    </Card>
+    <div className="source-badge" title={data.source_detail} style={{ '--c': info.tone }}>
+      <span className="source-dot" />
+      <span className="source-label">{info.label}</span>
+      <span className="source-meta">{data.source_detail} · observed {observed}</span>
+    </div>
   );
 }
 
 /* ---------- Live AQI hero card ---------- */
-function LiveAqiCard({ aqi, pm25, animOrder = 0 }) {
+function LiveAqiCard({ aqi, pm25, pm10, observedAt, animOrder = 0 }) {
   const label = getAqiLabel(aqi);
-  const gradient = getAqiGradient(aqi);
   const sliderPct = Math.min((aqi / 500) * 100, 100);
 
   return (
@@ -104,7 +87,7 @@ function LiveAqiCard({ aqi, pm25, animOrder = 0 }) {
       className="stagger-in"
       style={{
         animationDelay: `${animOrder * 0.08}s`,
-        background: gradient,
+        background: getAqiGradient(aqi),
         backdropFilter: 'none',
         WebkitBackdropFilter: 'none',
         border: 'none',
@@ -112,18 +95,20 @@ function LiveAqiCard({ aqi, pm25, animOrder = 0 }) {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        minHeight: '420px',
+        minHeight: '340px',
       }}
     >
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px #fff' }} />
-          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>Live AQI</span>
+          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>
+            Delhi average · {observedAt ? formatTime(observedAt) : 'now'}
+          </span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
           <span style={{ fontSize: '72px', fontWeight: '800', color: '#fff', lineHeight: 1, letterSpacing: '-2px' }}>
-            {aqi}
+            <CountUp value={aqi} />
           </span>
           <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', marginBottom: '12px' }}>(AQI-IN)</span>
         </div>
@@ -136,24 +121,21 @@ function LiveAqiCard({ aqi, pm25, animOrder = 0 }) {
           <span style={{ fontSize: '18px', fontWeight: '700', color: '#fff' }}>{label}</span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '24px' }}>
-          <div>
-            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>PM2.5 : </span>
-            <span style={{ fontSize: '16px', fontWeight: '700', color: '#fff' }}>{pm25} </span>
-            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>µg/m³</span>
-          </div>
-          <div>
-            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>PM10 : </span>
-            <span style={{ fontSize: '16px', fontWeight: '700', color: '#fff' }}>{Math.round(pm25 * 1.6)} </span>
-            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>µg/m³</span>
-          </div>
+        <div style={{ display: 'flex', gap: '28px', marginTop: '24px' }}>
+          {[['PM2.5', pm25], ['PM10', pm10]].map(([name, v]) => (
+            <div key={name}>
+              <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)' }}>{name} </span>
+              <span style={{ fontSize: '18px', fontWeight: '700', color: '#fff' }}>{v ?? '—'} </span>
+              <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)' }}>µg/m³</span>
+            </div>
+          ))}
         </div>
       </div>
 
       <div style={{ marginTop: '28px' }}>
         <div style={{
           position: 'relative', height: '8px', borderRadius: '4px',
-          background: 'linear-gradient(to right, #4ade80, #a3e635, #facc15, #fb923c, #f97316, #8b5cf6, #ef4444)',
+          background: 'linear-gradient(to right, #22c55e, #84cc16, #eab308, #f97316, #ef4444, #a21caf)',
         }}>
           <div style={{
             position: 'absolute', left: `${sliderPct}%`, top: '50%',
@@ -171,71 +153,116 @@ function LiveAqiCard({ aqi, pm25, animOrder = 0 }) {
   );
 }
 
-/* ---------- Livability hero card — same visual weight as Live AQI ---------- */
-function LivabilityHeroCard({ aqi, animOrder = 0 }) {
-  const aqiScore = Math.max(0, Math.round(100 - (aqi / 500) * 100));
-  const greenScore = 72;
-  const vulnScore = 58;
-  const overall = Math.round((aqiScore + greenScore + vulnScore) / 3);
+/* ---------- 72h forecast chart for one ward (model median + 10–90% band) ---------- */
+function ForecastCard({ ward, detail, animOrder = 0 }) {
+  const [hover, setHover] = useState(null);
+  const [boxRef, W] = useWidth();
 
-  const items = [
-    { label: 'AQI Trend', score: aqiScore },
-    { label: 'Green Cover (NDVI)', score: greenScore },
-    { label: 'Vulnerability', score: vulnScore },
+  if (!detail?.hourly?.length) {
+    return (
+      <Card title="72-hour forecast" className="stagger-in" style={{ flex: 1.4, animationDelay: `${animOrder * 0.08}s` }}>
+        <div ref={boxRef}><Skeleton height={250} /></div>
+      </Card>
+    );
+  }
+
+  const points = [
+    { timestamp: detail.observed_at, aqi: detail.current_aqi, aqi_low: detail.current_aqi, aqi_high: detail.current_aqi },
+    ...detail.hourly,
   ];
+  const H = 220, padL = 34, padR = 10, padT = 12, padB = 26;
+  const maxV = Math.max(...points.map((p) => p.aqi_high)) * 1.08;
+  const minV = Math.max(0, Math.min(...points.map((p) => p.aqi_low)) * 0.9);
+  const x = (i) => padL + (i / (points.length - 1)) * (W - padL - padR);
+  const y = (v) => padT + (1 - (v - minV) / (maxV - minV || 1)) * (H - padT - padB);
+
+  const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.aqi).toFixed(1)}`).join(' ');
+  const band = [
+    ...points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.aqi_high).toFixed(1)}`),
+    ...points.slice().reverse().map((p, j) => `L${x(points.length - 1 - j).toFixed(1)},${y(p.aqi_low).toFixed(1)}`),
+    'Z',
+  ].join(' ');
+
+  // Colour the line by AQI band via a vertical gradient in chart coordinates
+  const stops = [0, 50, 100, 200, 300, 400, 500]
+    .map((v) => ({ v, off: Math.max(0, Math.min(1, (y(v) - padT) / (H - padT - padB))) }))
+    .reverse();
+
+  const forecast = detail.hourly;
+  const peak = forecast.reduce((a, b) => (b.aqi > a.aqi ? b : a));
+  const best = forecast.reduce((a, b) => (b.aqi < a.aqi ? b : a));
+  const h = hover ?? null;
+  const hp = h != null ? points[h] : null;
+  const ticks = [0, 24, 48, 72];
+  const gridVals = [minV, (minV + maxV) / 2, maxV];
+
+  function onMove(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * W;
+    const i = Math.round(((px - padL) / (W - padL - padR)) * (points.length - 1));
+    setHover(Math.max(0, Math.min(points.length - 1, i)));
+  }
 
   return (
     <Card
+      title={`72-hour forecast · ${ward?.ward_name ?? ''}`}
+      action={<span className="chip-muted">LightGBM · 10–90% band</span>}
       className="stagger-in"
-      style={{
-        animationDelay: `${animOrder * 0.08}s`,
-        background: 'linear-gradient(160deg, #d7f9a7 0%, #45a984 55%, #baf0ff 100%)',
-        backdropFilter: 'none',
-        WebkitBackdropFilter: 'none',
-        border: 'none',
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        minHeight: '420px',
-      }}
+      style={{ flex: 1.4, animationDelay: `${animOrder * 0.08}s` }}
     >
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px #fff' }} />
-          <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>Livability Snapshot</span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
-          <span style={{ fontSize: '72px', fontWeight: '800', color: '#fff', lineHeight: 1, letterSpacing: '-2px' }}>
-            <CountUp value={overall} />
-          </span>
-          <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', marginBottom: '12px' }}>/100</span>
-        </div>
-
-        <div style={{
-          display: 'inline-block', marginTop: '14px',
-          background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.3)',
-          borderRadius: '10px', padding: '8px 18px',
-        }}>
-          <span style={{ fontSize: '18px', fontWeight: '700', color: '#fff' }}>
-            {overall >= 70 ? 'Livable' : overall >= 45 ? 'Moderate' : 'Challenging'}
-          </span>
-        </div>
+      <div ref={boxRef} style={{ position: 'relative' }}>
+        <svg
+          width="100%" height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', cursor: 'crosshair' }}
+          onMouseMove={onMove} onMouseLeave={() => setHover(null)}
+        >
+          <defs>
+            <linearGradient id="fc-line" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1={padT} y2={H - padB}>
+              {stops.map((s) => <stop key={s.v} offset={s.off} stopColor={getAqiColor(s.v)} />)}
+            </linearGradient>
+          </defs>
+          {gridVals.map((v, i) => (
+            <g key={i}>
+              <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="var(--border)" strokeDasharray="3 4" />
+              <text x={padL - 6} y={y(v) + 3} fontSize="10" textAnchor="end" fill="var(--text-dim)">{Math.round(v)}</text>
+            </g>
+          ))}
+          <path d={band} fill="var(--accent-primary)" opacity="0.13" />
+          <path d={line} fill="none" stroke="url(#fc-line)" strokeWidth="2.6" strokeLinejoin="round" />
+          <circle cx={x(0)} cy={y(points[0].aqi)} r="4.5" fill={getAqiColor(points[0].aqi)} stroke="#fff" strokeWidth="2" />
+          {ticks.map((t) => (
+            <text key={t} x={x(t)} y={H - 8} fontSize="10" textAnchor={t === 0 ? 'start' : t === 72 ? 'end' : 'middle'} fill="var(--text-dim)">
+              {t === 0 ? 'Now' : `+${t}h`}
+            </text>
+          ))}
+          {hp && (
+            <g>
+              <line x1={x(h)} x2={x(h)} y1={padT} y2={H - padB} stroke="var(--text-dim)" strokeDasharray="2 3" />
+              <circle cx={x(h)} cy={y(hp.aqi)} r="4" fill={getAqiColor(hp.aqi)} stroke="#fff" strokeWidth="1.5" />
+            </g>
+          )}
+        </svg>
+        {hp && (
+          <div className="chart-tip" style={{ left: `${(x(h) / W) * 100}%` }}>
+            <strong style={{ color: getAqiColor(hp.aqi) }}>{Math.round(hp.aqi)}</strong> {getAqiLabel(hp.aqi)}
+            <span>{h === 0 ? 'Now' : formatTime(hp.timestamp, { weekday: 'short', hour: 'numeric', hour12: true })}</span>
+            {h > 0 && <span>range {Math.round(hp.aqi_low)}–{Math.round(hp.aqi_high)}</span>}
+          </div>
+        )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px' }}>
-        {items.map((item) => (
-          <div key={item.label}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-              <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.8)' }}>{item.label}</span>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: '#fff' }}>{item.score}/100</span>
-            </div>
-            <div style={{ height: '5px', borderRadius: '3px', background: 'rgba(0,0,0,0.25)', overflow: 'hidden' }}>
-              <div style={{ width: `${item.score}%`, height: '100%', background: 'rgba(255,255,255,0.85)', borderRadius: '3px' }} />
-            </div>
-          </div>
-        ))}
+      <div className="forecast-stats">
+        <div>
+          <p className="forecast-stat-value" style={{ color: getAqiColor(peak.aqi) }}>{Math.round(peak.aqi)}</p>
+          <p className="forecast-stat-label">Peak · {formatTime(peak.timestamp, { weekday: 'short', hour: 'numeric', hour12: true })}</p>
+        </div>
+        <div>
+          <p className="forecast-stat-value" style={{ color: getAqiColor(best.aqi) }}>{Math.round(best.aqi)}</p>
+          <p className="forecast-stat-label">Cleanest · {formatTime(best.timestamp, { weekday: 'short', hour: 'numeric', hour12: true })}</p>
+        </div>
+        <div>
+          <p className="forecast-stat-value" style={{ color: getAqiColor(forecast[23].aqi) }}>{Math.round(forecast[23].aqi)}</p>
+          <p className="forecast-stat-label">Tomorrow, same time</p>
+        </div>
       </div>
     </Card>
   );
@@ -352,376 +379,335 @@ function CigaretteCard({ cigarettes, pm25, animOrder = 0 }) {
   );
 }
 
-/* ---------- Top Pollutants — hero stat (PM2.5) + compact secondary list, severity-colored ---------- */
-function TopPollutantsCard({ pm25, animOrder = 0 }) {
-  const secondary = [
-    { name: 'PM10', value: Math.round(pm25 * 1.6), unit: 'µg/m³', max: 300 },
-    { name: 'NO₂', value: Math.round(pm25 * 0.22), unit: 'ppb', max: 100 },
-    { name: 'SO₂', value: Math.round(pm25 * 0.13), unit: 'ppb', max: 80 },
-    { name: 'CO', value: (pm25 * 0.007).toFixed(1), unit: 'ppm', max: 10 },
-    { name: 'O₃', value: Math.round(pm25 * 0.26), unit: 'ppb', max: 100 },
-  ];
-  const pm25Pct = Math.min((pm25 / 200) * 100, 100);
-  const pm25Color = colorForRelative(pm25 / 200);
+/* ---------- Pollutants: latest measured values vs CPCB limits ---------- */
+// CPCB National Ambient Air Quality Standards (24h, or 8h for CO/O3)
+const POLLUTANTS = [
+  { key: 'pm25', name: 'PM2.5', unit: 'µg/m³', limit: 60 },
+  { key: 'pm10', name: 'PM10', unit: 'µg/m³', limit: 100 },
+  { key: 'no2', name: 'NO₂', unit: 'µg/m³', limit: 80 },
+  { key: 'so2', name: 'SO₂', unit: 'µg/m³', limit: 80 },
+  { key: 'co', name: 'CO', unit: 'mg/m³', limit: 2, scale: 0.001 },
+  { key: 'o3', name: 'O₃', unit: 'µg/m³', limit: 100 },
+];
 
+function TopPollutantsCard({ latest, animOrder = 0 }) {
   return (
     <Card
-      title="Top Pollutants"
-      action={<span style={{ fontSize: '12px', color: 'var(--text-dim)' }} title="Current readings">ⓘ Now</span>}
+      title="Pollutants vs safe limit"
+      action={<span className="chip-muted">CPCB standard</span>}
       className="stagger-in"
       style={{ flex: 1, animationDelay: `${animOrder * 0.08}s` }}
     >
-      {/* Hero stat: PM2.5, the primary AQI driver */}
-      <div style={{ marginBottom: '20px', paddingBottom: '18px', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>PM2.5 <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>· primary driver</span></span>
-          <span style={{ fontSize: '32px', fontWeight: '800', color: pm25Color, lineHeight: 1 }}>
-            {pm25}<span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text-dim)' }}> µg/m³</span>
-          </span>
-        </div>
-        <div style={{ height: '6px', borderRadius: '3px', background: 'var(--bg-tertiary)', overflow: 'hidden', marginTop: '10px' }}>
-          <div style={{ width: `${pm25Pct}%`, height: '100%', background: pm25Color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
-        </div>
-      </div>
-
-      {/* Secondary pollutants, compact list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {secondary.map(p => {
-          const color = colorForRelative(parseFloat(p.value) / p.max);
-          return (
-            <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)', width: '32px', flexShrink: 0 }}>{p.name}</span>
-              <div style={{ flex: 1, height: '4px', background: 'var(--bg-tertiary)', borderRadius: '2px', overflow: 'hidden' }}>
-                <div style={{
-                  width: `${Math.min((parseFloat(p.value) / p.max) * 100, 100)}%`,
-                  height: '100%', background: color, borderRadius: '2px', transition: 'width 0.6s ease',
-                }} />
+      {!latest ? <Skeleton height={230} /> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          {POLLUTANTS.map((p) => {
+            const value = latest[p.key] * (p.scale ?? 1);
+            const ratio = value / p.limit;
+            const color = colorForRelative(ratio / 3);
+            return (
+              <div key={p.key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '5px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{p.name}</span>
+                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                    {value.toFixed(p.scale ? 2 : 0)} <span style={{ color: 'var(--text-dim)', fontWeight: 400, fontSize: '11px' }}>{p.unit}</span>
+                    <span style={{ color, fontWeight: 700, fontSize: '11px', marginLeft: '8px' }}>{ratio.toFixed(1)}×</span>
+                  </span>
+                </div>
+                <div style={{ position: 'relative', height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(ratio / 3, 1) * 100}%`, height: '100%', background: color, borderRadius: '3px', transition: 'width 0.6s ease' }} />
+                  {/* safe-limit marker at 1× */}
+                  <div style={{ position: 'absolute', left: '33.3%', top: 0, bottom: 0, width: '2px', background: 'var(--text-dim)', opacity: 0.6 }} />
+                </div>
               </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)', width: '64px', textAlign: 'right', flexShrink: 0 }}>
-                {p.value} {p.unit}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bar marker = safe limit (1×). Scale shows up to 3× the limit.</p>
+        </div>
+      )}
     </Card>
   );
 }
 
+/* ---------- Historical chart (measured) ---------- */
 const RANGE_CONFIG = {
-  '12h': { points: 12, unitLabel: 'hr', stepHours: 1 },
-  '24h': { points: 24, unitLabel: 'hr', stepHours: 1 },
-  '7d':  { points: 7,  unitLabel: 'day', stepHours: 24 },
-  '30d': { points: 30, unitLabel: 'day', stepHours: 24 },
+  '12h': { hours: 12, bucket: 1, label: '12 Hours' },
+  '24h': { hours: 24, bucket: 1, label: '24 Hours' },
+  '7d':  { hours: 24 * 7, bucket: 6, label: '7 Days' },
+  '30d': { hours: 24 * 30, bucket: 24, label: '30 Days' },
 };
 
-const POLLUTANT_CONFIG = {
-  aqi:  { label: 'AQI',   unit: '',       factor: 1 },
-  pm25: { label: 'PM2.5', unit: 'µg/m³',  factor: 1 },
-  pm10: { label: 'PM10',  unit: 'µg/m³',  factor: 1.6 },
-  co:   { label: 'CO',    unit: 'ppm',    factor: 0.007 },
-  no2:  { label: 'NO₂',   unit: 'ppb',    factor: 0.22 },
-  so2:  { label: 'SO₂',   unit: 'ppb',    factor: 0.13 },
-  o3:   { label: 'O₃',    unit: 'ppb',    factor: 0.26 },
+const SERIES_CONFIG = {
+  aqi:  { label: 'AQI',   unit: '' },
+  pm25: { label: 'PM2.5', unit: 'µg/m³' },
+  pm10: { label: 'PM10',  unit: 'µg/m³' },
+  co:   { label: 'CO',    unit: 'mg/m³', scale: 0.001, digits: 2 },
+  no2:  { label: 'NO₂',   unit: 'µg/m³' },
+  so2:  { label: 'SO₂',   unit: 'µg/m³' },
+  o3:   { label: 'O₃',    unit: 'µg/m³' },
 };
 
-function formatAxisLabel(date, unitLabel) {
-  return unitLabel === 'hr'
-    ? date.toLocaleTimeString('en-IN', { hour: 'numeric', hour12: true })
-    : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+function bucketSeries(series, hours, bucket, key) {
+  if (!series?.length) return [];
+  const end = new Date(series[series.length - 1].timestamp).getTime();
+  const start = end - (hours - 1) * 3600 * 1000;
+  const scale = SERIES_CONFIG[key].scale ?? 1;
+  const buckets = new Map();
+  series.forEach((p) => {
+    const t = new Date(p.timestamp).getTime();
+    if (t < start) return;
+    const b = Math.floor((end - t) / (bucket * 3600 * 1000));
+    const entry = buckets.get(b) || { sum: 0, n: 0, t };
+    entry.sum += p[key] * scale;
+    entry.n += 1;
+    entry.t = Math.min(entry.t, t);
+    buckets.set(b, entry);
+  });
+  return [...buckets.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([, e]) => ({ date: new Date(e.t), value: e.sum / e.n }));
 }
 
-function formatFullLabel(date, unitLabel) {
-  return unitLabel === 'hr'
-    ? date.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', hour12: true })
-    : date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function generateHistoricalSeries(range, pollutantKey, baseAqi, basePm25, anchorDate) {
-  const { points, unitLabel, stepHours } = RANGE_CONFIG[range];
-  const { factor } = POLLUTANT_CONFIG[pollutantKey];
-  const baseValue = pollutantKey === 'aqi' ? baseAqi : basePm25 * factor;
-
-  const series = [];
-  for (let i = 0; i < points; i++) {
-    const seedStr = `${range}-${pollutantKey}-${i}`;
-    let hash = 0;
-    for (let c = 0; c < seedStr.length; c++) hash = (hash * 31 + seedStr.charCodeAt(c)) >>> 0;
-    const wobble = ((hash % 100) / 100 - 0.5) * 0.35;
-    const value = Math.max(0, baseValue * (1 + wobble));
-    const hoursAgo = (points - 1 - i) * stepHours;
-    const date = new Date(anchorDate.getTime() - hoursAgo * 3600 * 1000);
-    series.push({
-      date,
-      axisLabel: formatAxisLabel(date, unitLabel),
-      fullLabel: formatFullLabel(date, unitLabel),
-      value: pollutantKey === 'aqi' ? Math.round(value) : parseFloat(value.toFixed(pollutantKey === 'co' ? 2 : 0)),
-    });
-  }
-  return series;
-}
-
-function HistoricalAqiCard({ cityAqi, cityPm25, anchorDate, animOrder = 0 }) {
+function HistoricalCard({ history, animOrder = 0 }) {
   const [range, setRange] = useState('24h');
-  const [pollutant, setPollutant] = useState('aqi');
-  const [chartType, setChartType] = useState('bar');
+  const [key, setKey] = useState('aqi');
+  const [chartType, setChartType] = useState('line');
+  const cfg = SERIES_CONFIG[key];
+  const { hours, bucket } = RANGE_CONFIG[range];
+  const series = useMemo(() => bucketSeries(history?.series, hours, bucket, key), [history, hours, bucket, key]);
+  const available = history?.series?.length ?? 0;
 
-  const series = generateHistoricalSeries(range, pollutant, cityAqi, cityPm25, anchorDate);
-  const config = POLLUTANT_CONFIG[pollutant];
-  const unitLabel = RANGE_CONFIG[range].unitLabel;
-
-  const minPoint = series.reduce((a, b) => (b.value < a.value ? b : a));
-  const maxPoint = series.reduce((a, b) => (b.value > a.value ? b : a));
-
-  const W = 700, H = 230, padL = 40, padR = 16, padT = 20, padB = 34;
-  const values = series.map(p => p.value);
-  const dataMin = Math.min(...values);
-  const dataMax = Math.max(...values);
-  const axisMax = dataMax * 1.15;
-  const axisMin = 0;
-
-  const x = (i) => padL + (i / (series.length - 1)) * (W - padL - padR);
-  const y = (v) => H - padB - ((v - axisMin) / (axisMax - axisMin || 1)) * (H - padT - padB);
-
-  const linePath = series.map((p, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${y(p.value)}`).join(' ');
-  const areaPath = `${linePath} L ${x(series.length - 1)} ${H - padB} L ${x(0)} ${H - padB} Z`;
-
-  const barSlot = (W - padL - padR) / series.length;
-  const barWidth = barSlot * 0.55;
-
-  const tabButtonStyle = (active) => ({
-    padding: '5px 12px',
-    borderRadius: '8px',
-    fontSize: '12px',
-    fontWeight: 600,
-    cursor: 'pointer',
-    border: 'none',
-    background: active ? CHART_ACCENT : 'var(--bg-tertiary)',
-    color: active ? '#0a0a0a' : 'var(--text-secondary)',
+  const tab = (active) => ({
+    padding: '5px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none',
+    background: active ? CHART_ACCENT : 'var(--bg-tertiary)', color: active ? '#0a0a0a' : 'var(--text-secondary)',
     transition: 'all 0.15s ease',
   });
 
-  const chartKey = `${range}-${pollutant}-${chartType}`;
-  const labelStride = Math.ceil(series.length / 8);
+  const fmt = (v) => (cfg.digits ? v.toFixed(cfg.digits) : Math.round(v));
+  const dayLabels = bucket >= 24;
+  const axisLabel = (d) => (dayLabels
+    ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+    : d.toLocaleString('en-IN', { hour: 'numeric', hour12: true, ...(bucket > 1 ? { day: '2-digit', month: 'short' } : {}) }));
+  const fullLabel = (d) => d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', hour12: true });
 
   return (
-    <Card title="Historical AQI Data" className="stagger-in" style={{ animationDelay: `${animOrder * 0.08}s` }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginBottom: '6px', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {Object.keys(RANGE_CONFIG).map((r) => (
-            <button key={r} style={tabButtonStyle(range === r)} onClick={() => setRange(r)}>
-              {r === '12h' ? '12 Hours' : r === '24h' ? '24 Hours' : r === '7d' ? '7 Days' : '30 Days'}
+    <Card
+      title="Historical air quality"
+      action={<span className="chip-muted">{history?.data_source === 'live' ? 'Ground-calibrated' : 'Measured'}</span>}
+      className="stagger-in"
+      style={{ animationDelay: `${animOrder * 0.08}s` }}
+    >
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginBottom: '10px', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {Object.entries(RANGE_CONFIG).map(([r, c]) => (
+            <button key={r} style={{ ...tab(range === r), opacity: available && available < c.hours / 2 ? 0.5 : 1 }}
+              onClick={() => setRange(r)} title={available < c.hours ? `Only ${Math.round(available / 24)} days of history available` : undefined}>
+              {c.label}
             </button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
-          <button style={tabButtonStyle(chartType === 'line')} onClick={() => setChartType('line')}>📈</button>
-          <button style={tabButtonStyle(chartType === 'bar')} onClick={() => setChartType('bar')}>📊</button>
+          <button style={tab(chartType === 'line')} onClick={() => setChartType('line')} aria-label="Line chart">📈</button>
+          <button style={tab(chartType === 'bar')} onClick={() => setChartType('bar')} aria-label="Bar chart">📊</button>
         </div>
       </div>
-
-      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '18px' }}>
-        {Object.entries(POLLUTANT_CONFIG).map(([key, cfg]) => (
-          <button key={key} style={tabButtonStyle(pollutant === key)} onClick={() => setPollutant(key)}>
-            {cfg.label}
-          </button>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
+        {Object.entries(SERIES_CONFIG).map(([k, c]) => (
+          <button key={k} style={tab(key === k)} onClick={() => setKey(k)}>{c.label}</button>
         ))}
       </div>
 
-      <svg key={chartKey} className="chart-fade" width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet">
-        {[0, 0.5, 1].map((f, i) => (
-          <line key={i} x1={padL} x2={W - padR}
-            y1={padT + f * (H - padT - padB)} y2={padT + f * (H - padT - padB)}
-            stroke="var(--bg-tertiary)" strokeWidth="1" />
-        ))}
-        {chartType === 'line' ? (
+      {!history ? <Skeleton height={230} /> : series.length < 2 ? (
+        <p style={{ color: 'var(--text-dim)', fontSize: '13px', padding: '40px 0', textAlign: 'center' }}>Not enough history yet.</p>
+      ) : (
+        <HistoryChart series={series} chartType={chartType} isAqi={key === 'aqi'} fmt={fmt} axisLabel={axisLabel} chartKey={`${range}-${key}-${chartType}`} />
+      )}
+
+      {series.length >= 2 && (() => {
+        const minP = series.reduce((a, b) => (b.value < a.value ? b : a));
+        const maxP = series.reduce((a, b) => (b.value > a.value ? b : a));
+        return (
           <>
-            <path d={areaPath} fill={CHART_ACCENT} opacity="0.1" stroke="none" />
-            <path d={linePath} fill="none" stroke={CHART_ACCENT} strokeWidth="2.5" />
-            {series.map((p, i) => {
-              const t = (p.value - dataMin) / (dataMax - dataMin || 1);
-              return <circle key={i} cx={x(i)} cy={y(p.value)} r="3.5" fill={colorForRelative(t)} />;
-            })}
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', marginTop: '4px' }}>
+              {fullLabel(series[0].date)} — {fullLabel(series[series.length - 1].date)}
+              {available < hours && ` · ${Math.round(available / 24)} days available`}
+            </p>
+            <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
+              <div>
+                <p style={{ fontSize: '20px', fontWeight: 700, color: '#22c55e' }}>{fmt(minP.value)}{cfg.unit && ` ${cfg.unit}`}</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Min. {cfg.label} · {fullLabel(minP.date)}</p>
+              </div>
+              <div>
+                <p style={{ fontSize: '20px', fontWeight: 700, color: '#ef4444' }}>{fmt(maxP.value)}{cfg.unit && ` ${cfg.unit}`}</p>
+                <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Max. {cfg.label} · {fullLabel(maxP.date)}</p>
+              </div>
+            </div>
           </>
-        ) : (
-          series.map((p, i) => {
-            const t = (p.value - dataMin) / (dataMax - dataMin || 1);
-            const barH = (H - padB) - y(p.value);
-            return (
-              <rect
-                key={i}
-                className="bar-rise"
-                style={{ animationDelay: `${i * 15}ms` }}
-                x={x(i) - barWidth / 2}
-                y={y(p.value)}
-                width={barWidth}
-                height={Math.max(barH, 2)}
-                rx="3"
-                fill={colorForRelative(t)}
-              />
-            );
-          })
-        )}
-        {series.map((p, i) => (
-          i % labelStride === 0 && (
-            <text key={i} x={x(i)} y={H - 12} fontSize="10" fill="var(--text-dim)" textAnchor="middle">
-              {p.axisLabel}
-            </text>
-          )
-        ))}
-      </svg>
-
-      <p style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', marginTop: '4px' }}>
-        {formatFullLabel(series[0].date, unitLabel)} — {formatFullLabel(series[series.length - 1].date, unitLabel)}
-      </p>
-
-      <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
-        <div>
-          <p style={{ fontSize: '20px', fontWeight: 700, color: '#4ade80' }}>
-            {minPoint.value}{config.unit && ` ${config.unit}`}
-          </p>
-          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-            Min. {config.label} at {minPoint.fullLabel}
-          </p>
-        </div>
-        <div>
-          <p style={{ fontSize: '20px', fontWeight: 700, color: '#ef4444' }}>
-            {maxPoint.value}{config.unit && ` ${config.unit}`}
-          </p>
-          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-            Max. {config.label} at {maxPoint.fullLabel}
-          </p>
-        </div>
-      </div>
+        );
+      })()}
     </Card>
   );
 }
 
+function HistoryChart({ series, chartType, isAqi, fmt, axisLabel, chartKey }) {
+  const [boxRef, W] = useWidth(700);
+  const H = 240, padL = 40, padR = 16, padT = 20, padB = 34;
+  const values = series.map((p) => p.value);
+  const dataMin = Math.min(...values), dataMax = Math.max(...values);
+  const axisMax = dataMax * 1.12 || 1;
+  const x = (i) => padL + (i / (series.length - 1)) * (W - padL - padR);
+  const y = (v) => H - padB - (v / axisMax) * (H - padT - padB);
+  const color = (v) => (isAqi ? getAqiColor(v) : colorForRelative((v - dataMin) / (dataMax - dataMin || 1)));
+  const linePath = series.map((p, i) => `${i ? 'L' : 'M'} ${x(i)} ${y(p.value)}`).join(' ');
+  const areaPath = `${linePath} L ${x(series.length - 1)} ${H - padB} L ${x(0)} ${H - padB} Z`;
+  const barW = ((W - padL - padR) / series.length) * 0.6;
+  const stride = Math.ceil(series.length / Math.max(4, Math.floor(W / 90)));
+
+  return (
+    <div ref={boxRef}>
+    <svg key={chartKey} className="chart-fade" width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+      {[0, 0.5, 1].map((f) => (
+        <g key={f}>
+          <line x1={padL} x2={W - padR} y1={y(axisMax * f)} y2={y(axisMax * f)} stroke="var(--border)" strokeDasharray="3 4" />
+          <text x={padL - 6} y={y(axisMax * f) + 3} fontSize="10" textAnchor="end" fill="var(--text-dim)">{fmt(axisMax * f)}</text>
+        </g>
+      ))}
+      {chartType === 'line' ? (
+        <>
+          <path d={areaPath} fill={CHART_ACCENT} opacity="0.12" />
+          <path d={linePath} fill="none" stroke={CHART_ACCENT} strokeWidth="2.4" strokeLinejoin="round" />
+          {series.length <= 40 && series.map((p, i) => <circle key={i} cx={x(i)} cy={y(p.value)} r="3" fill={color(p.value)} />)}
+        </>
+      ) : (
+        series.map((p, i) => (
+          <rect key={i} className="bar-rise" style={{ animationDelay: `${i * 12}ms` }}
+            x={x(i) - barW / 2} y={y(p.value)} width={barW} height={Math.max(H - padB - y(p.value), 2)} rx="3" fill={color(p.value)}>
+            <title>{fmt(p.value)}</title>
+          </rect>
+        ))
+      )}
+      {series.map((p, i) => i % stride === 0 && (
+        <text key={`l${i}`} x={x(i)} y={H - 12} fontSize="10" fill="var(--text-dim)" textAnchor="middle">{axisLabel(p.date)}</text>
+      ))}
+    </svg>
+    </div>
+  );
+}
+
+/* ---------- Page ---------- */
 export default function Home() {
   const [data, setData] = useState(null);
-  const [selectedWard, setSelectedWard] = useState(null);
+  const [timeline, setTimeline] = useState(null);
+  const [history, setHistory] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState({ wardId: null, data: null });
+  const [error, setError] = useState(false);
 
+  // Fire all requests at once; each card renders as soon as its data lands
   useEffect(() => {
-    getForecast('delhi').then(d => {
-      setData(d);
-      if (d && d.wards && d.wards.length > 0) {
-        const worst = [...d.wards].sort((a, b) => b.current_aqi - a.current_aqi)[0];
-        setSelectedWard(worst);
-      }
-    }).catch(err => {
-      setData({ error: 'Failed to fetch' });
-    });
+    getForecast('delhi').then((d) => (d?.wards?.length ? setData(d) : setError(true))).catch(() => setError(true));
+    getTimeline('delhi').then(setTimeline).catch(() => {});
+    getHistory('delhi', { hours: 720 }).then(setHistory).catch(() => {});
   }, []);
 
-  if (!data) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)' }}>
-      Loading...
-    </div>
-  );
-  
-  if (data.error || !data.wards || data.wards.length === 0) return (
+  const wards = useMemo(() => data?.wards ?? [], [data]);
+  const worst = useMemo(() => [...wards].sort((a, b) => b.current_aqi - a.current_aqi), [wards]);
+  const selectedWard = wards.find((w) => w.ward_id === selectedId) ?? worst[0];
+
+  useEffect(() => {
+    if (!selectedWard) return;
+    const wardId = selectedWard.ward_id;
+    getWardDetail('delhi', wardId).then((d) => setDetail({ wardId, data: d })).catch(() => {});
+  }, [selectedWard]);
+
+  const wardDetail = detail.wardId === selectedWard?.ward_id ? detail.data : null;
+  const latest = history?.series?.[history.series.length - 1];
+
+  if (error) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)', flexDirection: 'column', gap: '10px' }}>
-      <p style={{ fontSize: '18px', color: '#ef4444' }}>Error: Backend Data Not Available</p>
-      <p>The server is either still deploying the new datasets, or there is an API error.</p>
-      <p>Please wait 1-2 minutes and refresh the page.</p>
+      <p style={{ fontSize: '18px', color: '#ef4444' }}>Couldn&apos;t reach the Atmos API</p>
+      <p>The server may be waking up. Please refresh in a minute.</p>
     </div>
   );
 
-  const topWorst = [...data.wards].sort((a, b) => b.current_aqi - a.current_aqi).slice(0, 5);
-  const bestWard = data.wards.find(w => w.ward_id === data.best_ward) || data.wards[data.wards.length - 1];
-  const cityAqi = Math.round(data.city_avg_aqi);
-  const cityPm25 = Math.round(cityAqi * 0.42);
-  const cigarettes = (cityPm25 / 22).toFixed(1);
-  const anchorDate = data.generated_at ? new Date(data.generated_at) : new Date();
-
-  const sparkBest = [110, 105, 98, 102, 95, 100, bestWard.current_aqi];
+  const cityAqi = data ? Math.round(data.city_avg_aqi) : null;
+  const cityPm25 = latest ? Math.round(latest.pm25) : null;
+  const cityPm10 = latest ? Math.round(latest.pm10) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-      <div>
-        <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)' }}>
-          Delhi Air Quality Index & Realtime Air Pollution
-        </h2>
-      </div>
-
-      {/* Live AQI + Livability — 50/50 hero row */}
-      <div style={{ display: 'flex', gap: '16px' }}>
-        <LiveAqiCard aqi={cityAqi} pm25={cityPm25} animOrder={0} />
-        <LivabilityHeroCard aqi={cityAqi} animOrder={1} />
-      </div>
-
-      {/* Cigarette (illustrated) + Top Pollutants — 50/50 */}
-      <div style={{ display: 'flex', gap: '16px' }}>
-        <CigaretteCard cigarettes={cigarettes} animOrder={2} />
-        <TopPollutantsCard pm25={cityPm25} animOrder={3} />
-      </div>
-
-      {/* Best Ward — alone for now, pairing TBD */}
-      <StatCard
-        title="Best Ward"
-        numericValue={bestWard.current_aqi}
-        subtitle={bestWard.ward_name}
-        color={getAqiColor(bestWard.current_aqi)}
-        icon="✅"
-        sparkValues={sparkBest}
-        animOrder={4}
-      />
-
-      {/* Top 5 Worst Wards */}
-      <Card title="Top 5 Worst Wards" className="stagger-in" style={{ animationDelay: '0.4s' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {topWorst.map((ward, i) => (
-            <div
-              key={ward.ward_id}
-              onClick={() => setSelectedWard(ward)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                cursor: 'pointer', padding: '4px 6px', borderRadius: '8px',
-                background: selectedWard?.ward_id === ward.ward_id ? 'rgba(92,224,210,0.08)' : 'transparent',
-                transition: 'background 0.2s ease',
-              }}
-            >
-              <span style={{ fontSize: '12px', color: 'var(--text-dim)', width: '16px' }}>{i + 1}</span>
-              <span style={{ flex: 1, fontSize: '13px', color: 'var(--text-primary)' }}>{ward.ward_name}</span>
-              <div style={{ flex: 2, height: '6px', background: 'var(--bg-tertiary)', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ width: `${(ward.current_aqi / 500) * 100}%`, height: '100%', background: getAqiColor(ward.current_aqi), borderRadius: '3px' }} />
-              </div>
-              <span style={{ fontSize: '13px', fontWeight: '600', color: getAqiColor(ward.current_aqi), width: '36px', textAlign: 'right' }}>
-                {ward.current_aqi}
-              </span>
-            </div>
-          ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)' }}>
+            Delhi AQI forecast
+          </h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+            Ward-level predictions for the next 72 hours. Press play or drag the timeline to watch them unfold.
+          </p>
         </div>
-      </Card>
+        <DataSourceBadge data={data} />
+      </div>
 
-      {/* Historical chart */}
-      <HistoricalAqiCard cityAqi={cityAqi} cityPm25={cityPm25} anchorDate={anchorDate} animOrder={5} />
-
-      {/* All wards pills */}
-      <Card title="All Wards — Current Status" className="stagger-in" style={{ animationDelay: '0.56s' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-          {data.wards.map((ward) => (
-            <div
-              key={ward.ward_id}
-              onClick={() => setSelectedWard(ward)}
-              style={{
-                padding: '6px 12px', borderRadius: '20px',
-                background: selectedWard?.ward_id === ward.ward_id ? `${getAqiColor(ward.current_aqi)}20` : 'var(--bg-tertiary)',
-                border: `1px solid ${getAqiColor(ward.current_aqi)}40`,
-                display: 'flex', alignItems: 'center', gap: '6px',
-                cursor: 'pointer', transition: 'all 0.2s ease',
-              }}
-            >
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: getAqiColor(ward.current_aqi) }} />
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{ward.ward_name}</span>
-              <span style={{ fontSize: '12px', fontWeight: '700', color: getAqiColor(ward.current_aqi) }}>{ward.current_aqi}</span>
-              <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
-                {ward.trend === 'worsening' ? '↑' : ward.trend === 'improving' ? '↓' : '→'}
-              </span>
-            </div>
-          ))}
+      {data?.data_source === 'offline-sample' && (
+        <div className="notice">
+          Live data sources are unreachable, so this shows the bundled sample from {formatTime(data.observed_at, { day: 'numeric', month: 'long', year: 'numeric' })}.
+          Forecasts are still produced by the model, but they are not current.
         </div>
+      )}
+
+      {/* Spatial hero */}
+      {data ? (
+        <PredictionMap
+          wards={wards}
+          timeline={timeline}
+          selectedWardId={selectedWard?.ward_id}
+          onWardClick={(w) => setSelectedId(w.ward_id)}
+        />
+      ) : <Skeleton height={560} style={{ borderRadius: 20 }} />}
+
+      {/* Now + prediction */}
+      <div className="dash-row">
+        {data ? (
+          <LiveAqiCard aqi={cityAqi} pm25={cityPm25} pm10={cityPm10} observedAt={data.observed_at} animOrder={0} />
+        ) : <Skeleton height={340} style={{ flex: 1 }} />}
+        <ForecastCard ward={selectedWard} detail={wardDetail} animOrder={1} />
+      </div>
+
+      <div className="dash-row">
+        {cityPm25 != null ? (
+          <CigaretteCard cigarettes={(cityPm25 / 22).toFixed(1)} pm25={cityPm25} animOrder={2} />
+        ) : <Skeleton height={340} style={{ flex: 1 }} />}
+        <TopPollutantsCard latest={latest} animOrder={3} />
+      </div>
+
+      <HistoricalCard history={history} animOrder={4} />
+
+      {/* Ward rankings */}
+      <Card title="All wards — now and in 24h" className="stagger-in" style={{ animationDelay: '0.4s' }}>
+        {!data ? <Skeleton height={120} /> : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {worst.map((ward) => {
+              const c = getAqiColor(ward.current_aqi);
+              const active = selectedWard?.ward_id === ward.ward_id;
+              return (
+                <button
+                  key={ward.ward_id}
+                  onClick={() => setSelectedId(ward.ward_id)}
+                  className="ward-pill"
+                  style={{ '--c': c, background: active ? `${c}22` : undefined }}
+                  title={`Forecast in 24h: ${Math.round(ward.forecast_aqi_24h)}`}
+                >
+                  <span className="dot" />
+                  <span className="name">{ward.ward_name}</span>
+                  <span className="val">{Math.round(ward.current_aqi)}</span>
+                  <span className="next" style={{ color: getAqiColor(ward.forecast_aqi_24h) }}>
+                    {ward.trend === 'worsening' ? '↑' : '↓'} {Math.round(ward.forecast_aqi_24h)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </Card>
 
     </div>

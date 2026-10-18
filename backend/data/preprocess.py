@@ -17,6 +17,72 @@ NCR_STATIONS = {
 def _normalize_ward_name(name: str) -> str:
     return re.sub(r'\s+', '_', str(name).strip()).lower()
 
+# Diwali dates (the model flags +/- 2 days around each)
+DIWALI_DATES = pd.to_datetime([
+    "2023-11-12", "2024-10-31", "2025-10-20", "2026-11-08", "2027-10-29", "2028-10-17",
+])
+
+
+def add_model_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Temporal, event, lag, rolling and interaction features shared by training and live inference.
+
+    Expects one row per station per hour with pollutant, aqi and weather columns.
+    """
+    df = df.sort_values(by=["station", "timestamp"]).reset_index(drop=True)
+
+    logger.info("Temporal features")
+    df["hour"] = df["timestamp"].dt.hour
+    df["day_of_week"] = df["timestamp"].dt.dayofweek
+    df["month"] = df["timestamp"].dt.month
+    df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
+
+    # Cyclical encodings so the model sees Dec/Jan and Sun/Mon as adjacent
+    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
+    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
+    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+    df["dow_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
+    df["dow_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
+
+    df["is_stubble_season"] = df["month"].isin([9, 10, 11, 12]).astype(int)
+
+    is_diwali = pd.Series(False, index=df.index)
+    for d in DIWALI_DATES:
+        is_diwali |= (df["timestamp"] >= d - pd.Timedelta(days=2)) & (df["timestamp"] <= d + pd.Timedelta(days=2))
+    df["is_diwali"] = is_diwali.astype(int)
+
+    is_dec31 = (df["month"] == 12) & (df["timestamp"].dt.day == 31)
+    is_jan1 = (df["month"] == 1) & (df["timestamp"].dt.day == 1)
+    df["is_new_year"] = (is_dec31 | is_jan1).astype(int)
+
+    logger.info("Engineering lag features")
+    lags = [1, 3, 6, 12, 24]
+    for lag in lags:
+        df[f"pm25_lag_{lag}h"] = df.groupby("station")["pm25"].shift(lag)
+        if "aqi" in df.columns:
+            df[f"aqi_lag_{lag}h"] = df.groupby("station")["aqi"].shift(lag)
+
+    logger.info("Rolling features")
+    windows = [6, 12, 24]
+    for w in windows:
+        df[f"pm25_rolling_{w}h"] = df.groupby("station")["pm25"].transform(
+            lambda x: x.rolling(w, min_periods=w).mean()
+        )
+        if "aqi" in df.columns:
+            df[f"aqi_rolling_{w}h"] = df.groupby("station")["aqi"].transform(
+                lambda x: x.rolling(w, min_periods=w).mean()
+            )
+
+    logger.info("Interaction features")
+    if "wind_speed_10m" in df.columns and "relative_humidity_2m" in df.columns:
+        df["wind_humidity_cross"] = df["wind_speed_10m"] * df["relative_humidity_2m"]
+
+    if "temperature_2m" in df.columns and "wind_speed_10m" in df.columns:
+        df["temp_wind_cross"] = df["temperature_2m"] / (df["wind_speed_10m"] + 1)
+
+    return df
+
+
 def engineer_features():
     cache_dir = os.path.join("data_store", "cache")
     aqi_path = os.path.join(cache_dir, "aqi_delhi.csv")
@@ -56,56 +122,7 @@ def engineer_features():
             global_median = df[col].median()
             df[col] = df[col].fillna(global_median if not pd.isna(global_median) else 0)
 
-    logger.info("Temporal features")
-    df["hour"] = df["timestamp"].dt.hour
-    df["day_of_week"] = df["timestamp"].dt.dayofweek
-    df["month"] = df["timestamp"].dt.month
-    df["is_weekend"] = df["day_of_week"].isin([5, 6]).astype(int)
-
-    # Cyclical encodings so the model sees Dec/Jan and Sun/Mon as adjacent
-    df["hour_sin"] = np.sin(2 * np.pi * df["hour"] / 24)
-    df["hour_cos"] = np.cos(2 * np.pi * df["hour"] / 24)
-    df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
-    df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
-    df["dow_sin"] = np.sin(2 * np.pi * df["day_of_week"] / 7)
-    df["dow_cos"] = np.cos(2 * np.pi * df["day_of_week"] / 7)
-
-    df["is_stubble_season"] = df["month"].isin([9, 10, 11, 12]).astype(int)
-
-    diwali_2023 = pd.to_datetime("2023-11-12")
-    diwali_2024 = pd.to_datetime("2024-10-31")
-    is_diwali_23 = (df["timestamp"] >= (diwali_2023 - pd.Timedelta(days=2))) & (df["timestamp"] <= (diwali_2023 + pd.Timedelta(days=2)))
-    is_diwali_24 = (df["timestamp"] >= (diwali_2024 - pd.Timedelta(days=2))) & (df["timestamp"] <= (diwali_2024 + pd.Timedelta(days=2)))
-    df["is_diwali"] = (is_diwali_23 | is_diwali_24).astype(int)
-
-    is_dec31 = (df["month"] == 12) & (df["timestamp"].dt.day == 31)
-    is_jan1 = (df["month"] == 1) & (df["timestamp"].dt.day == 1)
-    df["is_new_year"] = (is_dec31 | is_jan1).astype(int)
-
-    logger.info("Engineering lag features")
-    lags = [1, 3, 6, 12, 24]
-    for lag in lags:
-        df[f"pm25_lag_{lag}h"] = df.groupby("station")["pm25"].shift(lag)
-        if "aqi" in df.columns:
-            df[f"aqi_lag_{lag}h"] = df.groupby("station")["aqi"].shift(lag)
-
-    logger.info("Rolling features")
-    windows = [6, 12, 24]
-    for w in windows:
-        df[f"pm25_rolling_{w}h"] = df.groupby("station")["pm25"].transform(
-            lambda x: x.rolling(w, min_periods=w).mean()
-        )
-        if "aqi" in df.columns:
-            df[f"aqi_rolling_{w}h"] = df.groupby("station")["aqi"].transform(
-                lambda x: x.rolling(w, min_periods=w).mean()
-            )
-
-    logger.info("Interaction features")
-    if "wind_speed_10m" in df.columns and "relative_humidity_2m" in df.columns:
-        df["wind_humidity_cross"] = df["wind_speed_10m"] * df["relative_humidity_2m"]
-
-    if "temperature_2m" in df.columns and "wind_speed_10m" in df.columns:
-        df["temp_wind_cross"] = df["temperature_2m"] / (df["wind_speed_10m"] + 1)
+    df = add_model_features(df)
 
     logger.info("Spatial ward assignment")
     try:

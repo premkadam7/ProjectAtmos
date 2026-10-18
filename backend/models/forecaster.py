@@ -1,153 +1,108 @@
-import os
-import joblib
-import pandas as pd
-import numpy as np
 import math
-from datetime import datetime, timedelta, timezone
 
-_models = {}
-_feature_names = None
-_latest_features = None
-
-def _load_resources():
-    global _models, _feature_names, _latest_features
-    if _models:
-        return
-
-    model_dir = os.path.join(os.path.dirname(__file__), "..", "data_store", "models")
-    cache_dir = os.path.join(os.path.dirname(__file__), "..", "data_store", "cache")
-
-    try:
-        _models['q10'] = joblib.load(os.path.join(model_dir, "champion_q10.pkl"))
-        _models['q50'] = joblib.load(os.path.join(model_dir, "champion_q50.pkl"))
-        _models['q90'] = joblib.load(os.path.join(model_dir, "champion_q90.pkl"))
-        _feature_names = joblib.load(os.path.join(model_dir, "feature_names.pkl"))
-
-        df = pd.read_csv(os.path.join(cache_dir, "features_delhi.csv"))
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-        df = df.sort_values("timestamp").groupby("station").tail(1).reset_index(drop=True)
-        _latest_features = df
-    except Exception as e:
-        print(f"Failed to load models: {e}")
+import pandas as pd
 
 from data.ingest import calculate_aqi_from_pm25
+from services.live_pipeline import get_snapshot, model_predict, POLLUTANTS
+
 
 def _pm25_to_aqi(pm25):
     """Accurate NAQI breakpoints scale."""
     return calculate_aqi_from_pm25(pm25)
 
-def get_city_overview():
-    _load_resources()
-    if _latest_features is None:
-        return []
 
-    overview = []
-    for _, row in _latest_features.iterrows():
-        ward_id = row.get("ward_id", "unknown")
-        if pd.isna(ward_id):
-            continue
+def _find_ward(snap, ward_id):
+    for w in snap["wards"]:
+        if w["ward_id"] == ward_id:
+            return w
+    return snap["wards"][0] if snap["wards"] else None
 
-        wf = get_ward_forecast(ward_id, 72)
-        if not wf:
-            continue
 
-        current_aqi = wf["current_aqi"]
-        hourly = wf["hourly"]
-        
-        # 24h, 48h, 72h forecasts from the hourly list
-        f_24h = hourly[23]["aqi"]
-        f_48h = hourly[47]["aqi"]
-        f_72h = hourly[71]["aqi"]
-
-        overview.append({
-            "ward_id": ward_id,
-            "ward_name": wf["ward_name"],
-            "lat": row.get("lat", 28.6139),
-            "lon": row.get("lon", 77.2090),
-            "current_aqi": current_aqi,
-            "forecast_aqi_24h": f_24h,
-            "forecast_aqi_48h": f_48h,
-            "forecast_aqi_72h": f_72h,
-            "trend": "worsening" if f_24h > current_aqi else "improving",
-            "cigarette_equivalent": wf["cigarette_equivalent"]
-        })
-    return overview
-
-def get_ward_forecast(ward_id: str, hours: int = 72):
-    _load_resources()
-    if _latest_features is None:
-        return None
-
-    ward_row = _latest_features[_latest_features["ward_id"] == ward_id]
+def _latest_row(ward_id):
+    """Latest model feature row for a ward (first station if the ward is unknown)."""
+    latest = get_snapshot()["latest_features"]
+    ward_row = latest[latest["ward_id"] == ward_id]
     if ward_row.empty:
-        ward_row = _latest_features.iloc[[0]]
+        ward_row = latest.iloc[[0]]
+    return ward_row.iloc[0]
 
-    row = ward_row.iloc[0]
-    current_pm25 = row.get("pm25", 50.0)
-    current_aqi = _pm25_to_aqi(current_pm25)
 
-    X = row[_feature_names].values.reshape(1, -1)
-    q10_24h = _pm25_to_aqi(_models['q10'].predict(X)[0])
-    q50_24h = _pm25_to_aqi(_models['q50'].predict(X)[0])
-    q90_24h = _pm25_to_aqi(_models['q90'].predict(X)[0])
-
-    hourly = []
-    now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
-    delta_per_hour = (q50_24h - current_aqi) / 24.0
-
-    for i in range(hours):
-        if i <= 24:
-            base = current_aqi + delta_per_hour * i
-        else:
-            base = q50_24h + delta_per_hour * (i - 24) * 0.5
-
-        hour_of_day = (now.hour + i) % 24
-        diurnal = 15 * (
-            math.cos((hour_of_day - 9) * math.pi / 12)
-            + math.cos((hour_of_day - 20) * math.pi / 12)
-        )
-
-        aqi = max(10.0, base + diurnal)
-
-        uncertainty = min(1.0, i / 24.0)
-        band = (q90_24h - q10_24h) * uncertainty
-
-        hourly.append({
-            "timestamp": (now + timedelta(hours=i)).isoformat(),
-            "aqi": round(aqi, 1),
-            "pm25": round(aqi * 0.5, 1),
-            "pm10": round(aqi * 0.8, 1),
-            "aqi_low": round(aqi - band / 2, 1),
-            "aqi_high": round(aqi + band / 2, 1)
-        })
-
+def get_data_source():
+    snap = get_snapshot()
     return {
-        "ward_id": row.get("ward_id"),
-        "ward_name": row.get("station"),
-        "current_aqi": round(current_aqi, 1),
-        "cigarette_equivalent": round(current_pm25 / 22.0, 1),
-        "hourly": hourly
+        "data_source": snap["source"],
+        "source_detail": snap["source_detail"],
+        "observed_at": snap["observed_at"],
+        "generated_at": snap["generated_at"],
+        "ground_stations": snap["ground_stations"],
     }
 
+
+def get_city_overview():
+    snap = get_snapshot()
+    return [{k: v for k, v in w.items() if k != "hourly"} for w in snap["wards"]]
+
+
+def get_city_hourly():
+    """Hourly AQI predictions for every ward, for the map timeline."""
+    snap = get_snapshot()
+    if not snap["wards"]:
+        return {"timestamps": [], "wards": {}}
+    return {
+        "timestamps": [h["timestamp"] for h in snap["wards"][0]["hourly"]],
+        "wards": {w["ward_id"]: [h["aqi"] for h in w["hourly"]] for w in snap["wards"]},
+    }
+
+
+def get_ward_forecast(ward_id: str, hours: int = 72):
+    w = _find_ward(get_snapshot(), ward_id)
+    if w is None:
+        return None
+    return {
+        "ward_id": w["ward_id"],
+        "ward_name": w["ward_name"],
+        "current_aqi": w["current_aqi"],
+        "current_pm25": w["current_pm25"],
+        "cigarette_equivalent": w["cigarette_equivalent"],
+        "hourly": w["hourly"][:hours],
+    }
+
+
+def get_history(ward_id: str = None, hours: int = 24 * 30):
+    """Hourly observed pollutant history for one ward, or the city mean when ward_id is None."""
+    hist = get_snapshot()["history"]
+    if ward_id:
+        hist = hist[hist["ward_id"] == ward_id]
+        if hist.empty:
+            return []
+    cols = [*POLLUTANTS, "aqi"]
+    series = hist.groupby("timestamp")[cols].mean().sort_index()
+    series = series[series.index > series.index.max() - pd.Timedelta(hours=hours)]
+    return [
+        {"timestamp": ts.tz_localize("UTC").isoformat(), **{c: round(float(row[c]), 2) for c in cols}}
+        for ts, row in series.iterrows()
+    ]
+
+
 _shap_explainer = None
+
+
+def _model_resources():
+    from services.live_pipeline import _load_resources
+    res = _load_resources()
+    return res["models"], res["feature_names"]
+
 
 def get_ward_blame(ward_id: str):
     import shap
     global _shap_explainer
 
-    _load_resources()
-    if _latest_features is None or _models.get('q50') is None:
-        return None
-
+    models, feature_names = _model_resources()
     if _shap_explainer is None:
-        _shap_explainer = shap.TreeExplainer(_models['q50'])
+        _shap_explainer = shap.TreeExplainer(models['q50'])
 
-    ward_row = _latest_features[_latest_features["ward_id"] == ward_id]
-    if ward_row.empty:
-        ward_row = _latest_features.iloc[[0]]
-
-    row = ward_row.iloc[0]
-    X = row[_feature_names].values.reshape(1, -1)
+    row = _latest_row(ward_id)
+    X = row[feature_names].values.astype(float).reshape(1, -1)
     shap_values = _shap_explainer.shap_values(X)[0]
 
     weather_feats = {
@@ -170,9 +125,9 @@ def get_ward_blame(ward_id: str):
         "Other": {"icon": "❓", "score": 0.0},
     }
 
-    baseline_feats = {c for c in _feature_names if any(k in c for k in ['lag', 'rolling', 'pm', 'aqi', 'no2', 'co'])}
+    baseline_feats = {c for c in feature_names if any(k in c for k in ['lag', 'rolling', 'pm', 'aqi', 'no2', 'co'])}
 
-    for i, feat in enumerate(_feature_names):
+    for i, feat in enumerate(feature_names):
         val = abs(shap_values[i])
         if feat in weather_feats:
             categories["Weather"]["score"] += val
@@ -201,35 +156,28 @@ def get_ward_blame(ward_id: str):
 
     top = factors[0] if factors else {"name": "Unknown", "percentage": 0}
 
-    current_pm25 = float(row.get("pm25", 50.0))
-    pred_pm25 = float(_models['q50'].predict(X)[0])
+    ward = _find_ward(get_snapshot(), row["ward_id"])
 
     return {
         "ward_id": str(row.get("ward_id", ward_id)),
         "ward_name": str(row.get("station", ward_id)),
-        "current_aqi": float(round(_pm25_to_aqi(current_pm25), 1)),
+        "current_aqi": float(ward["current_aqi"]),
         "factors": factors,
         "explanation": f"AQI is primarily influenced by {top['name']} ({top['percentage']}%).",
-        "forecast_trend": "worsening" if pred_pm25 > current_pm25 else "improving"
+        "forecast_trend": ward["trend"]
     }
 
 
 def run_whatif_simulation(ward_id: str, intervention: str, duration_hours: int = 48) -> dict:
-    _load_resources()
-    if _latest_features is None or _models.get('q50') is None:
-        return {}
-
-    # Find the ward row
-    ward_row = _latest_features[_latest_features["ward_id"] == ward_id]
-    if ward_row.empty:
-        ward_row = _latest_features.iloc[[0]]
-
-    row = ward_row.iloc[0]
+    models, feature_names = _model_resources()
+    row = _latest_row(ward_id)
     ward_name = row.get("station", ward_id)
+    # Model output is on the CAMS scale; the station ratio maps it to ground level
+    ratio = float(row.get("ratio_pm25", 1.0))
 
     # 1. Baseline prediction
-    X = row[_feature_names].values.reshape(1, -1)
-    baseline_pm25 = _models['q50'].predict(X)[0]
+    X = row[feature_names].values.astype(float).reshape(1, -1)
+    baseline_pm25 = model_predict(models['q50'], X)[0] * ratio
     baseline_aqi = _pm25_to_aqi(baseline_pm25)
 
     # 3. Production mode (genuine ML counterfactual)
@@ -242,8 +190,8 @@ def run_whatif_simulation(ward_id: str, intervention: str, duration_hours: int =
     elif intervention in ("industrial_shutdown", "pause factory industrial emissions"):
         modified_row["so2"] = 0.0
 
-    X_mod = modified_row[_feature_names].values.reshape(1, -1)
-    counterfactual_pm25 = _models['q50'].predict(X_mod)[0]
+    X_mod = modified_row[feature_names].values.astype(float).reshape(1, -1)
+    counterfactual_pm25 = model_predict(models['q50'], X_mod)[0] * ratio
     counterfactual_aqi = _pm25_to_aqi(counterfactual_pm25)
 
     scale = 1.0 - math.exp(-duration_hours / 24.0)
