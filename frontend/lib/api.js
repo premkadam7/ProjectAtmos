@@ -8,7 +8,24 @@ import {
   mockWhatIf,
 } from './mockData';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+// Backend data refreshes every ~30 min, so reuse GET responses briefly: this
+// dedupes concurrent requests and makes moving between pages instant.
+const CACHE_TTL_MS = 60 * 1000;
+const responseCache = new Map();
+
+function cachedGet(path) {
+  const hit = responseCache.get(path);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise;
+  const promise = fetch(`${BASE_URL}${path}`).then((res) => {
+    if (!res.ok) throw new Error(`API responded ${res.status} for ${path}`);
+    return res.json();
+  });
+  responseCache.set(path, { at: Date.now(), promise });
+  promise.catch(() => responseCache.delete(path));
+  return promise;
+}
 
 // Backend data refreshes every ~30 min, so reuse GET responses briefly: this
 // dedupes concurrent requests and makes moving between pages instant.
