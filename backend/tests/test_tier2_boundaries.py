@@ -29,8 +29,8 @@ def test_chat_fallback_language(client):
     assert response.status_code == 200
     data = response.json()
     parsed = ChatResponse(**data)
-    # The API returns the requested language but answers in English
-    assert parsed.language == "fr"
+    # Unsupported languages are answered, and reported, as English
+    assert parsed.language == "en"
     assert "Delhi's average AQI is" in parsed.response
 
 def test_chat_invalid_json(client):

@@ -252,8 +252,22 @@ Guidelines:
 2. If the user asks about health impacts, represent it using the "cigarette equivalent" metric (e.g. smoking X cigarettes a day) if available.
 3. Be concise, professional, and helpful.
 4. Keep the conversation history in mind.
-5. If the language requested is "hi" or the user query is in Hindi, you MUST respond in Hindi (हिंदी) using Devanagari script. Translate concepts like 'cigarette equivalent' or 'enforcement tickets' into appropriate Hindi terms, but keep ward names recognizable. If the language is "en", respond in English.
+5. Response language: {language_instruction}
 """
+
+SUPPORTED_LANGUAGES = {"en", "hi"}
+LANGUAGE_INSTRUCTIONS = {
+    "hi": ("Respond in Hindi (हिंदी) using Devanagari script, even if the user writes in English. "
+           "Translate concepts like 'cigarette equivalent' or 'enforcement tickets' into appropriate Hindi terms, "
+           "but keep ward names recognizable."),
+    "en": "Respond in English, even if the user writes in another language.",
+}
+
+
+def resolve_language(language: str) -> str:
+    """Supported response language; anything else is answered in English."""
+    lang = (language or "").strip().lower()
+    return lang if lang in SUPPORTED_LANGUAGES else "en"
 
 class AtmosChatbotService:
     _sessions: Dict[str, List] = {}
@@ -300,6 +314,7 @@ class AtmosChatbotService:
 
     @classmethod
     async def chat_stream(cls, message: str, language: str, conversation_id: str, force_rag: bool = False) -> AsyncGenerator[str, None]:
+        language = resolve_language(language)
         sources = _sources(get_data_source())
         use_mock = cls.should_use_mock(force_rag)
 
@@ -356,6 +371,7 @@ class AtmosChatbotService:
         try:
             async for chunk in chain.astream({
                 "context": context,
+                "language_instruction": LANGUAGE_INSTRUCTIONS[language],
                 "history": lc_history,
                 "message": message
             }):
@@ -391,6 +407,7 @@ class AtmosChatbotService:
 
     @classmethod
     async def chat_non_stream(cls, message: str, language: str, conversation_id: str, force_rag: bool = False) -> dict:
+        language = resolve_language(language)
         sources = _sources(get_data_source())
         use_mock = cls.should_use_mock(force_rag)
 
@@ -434,6 +451,7 @@ class AtmosChatbotService:
         try:
             response = await chain.ainvoke({
                 "context": context,
+                "language_instruction": LANGUAGE_INSTRUCTIONS[language],
                 "history": lc_history,
                 "message": message
             })
