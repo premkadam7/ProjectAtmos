@@ -1,8 +1,10 @@
 import os
 import json
-import pandas as pd
 import ee
 import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from data.ndvi_table import NDVI_PATH, NdviSchemaError, write_ndvi_table
 
 def authenticate_and_initialize():
     try:
@@ -16,7 +18,7 @@ def authenticate_and_initialize():
 def get_ndvi_for_wards():
     cache_dir = os.path.join("data_store", "cache")
     geojson_path = os.path.join("data_store", "geojson", "delhi_wards.geojson")
-    output_path = os.path.join(cache_dir, "ward_ndvi.csv")
+    output_path = NDVI_PATH
 
     if not os.path.exists(geojson_path):
         print(f"GeoJSON not found: {geojson_path}")
@@ -46,8 +48,7 @@ def get_ndvi_for_wards():
     
     for i, feature in enumerate(features):
         props = feature.get("properties", {})
-        # Account for case sensitivity differences
-        ward_id = props.get("Ward_No", props.get("WARD_NO", "Unknown"))
+        # Keyed by Ward_Name, the column preprocess.py joins on
         ward_name = props.get("Ward_Name", props.get("WARD_NAME", "Unknown"))
         
         geom = feature.get("geometry")
@@ -65,24 +66,22 @@ def get_ndvi_for_wards():
                 maxPixels=1e9
             ).getInfo()
             
-            val = stats.get('NDVI', 0)
-            results.append({
-                "ward_id": ward_id,
-                "ndvi": val if val is not None else 0.0
-            })
+            results.append({"Ward_Name": ward_name, "ndvi_mean": stats.get('NDVI')})
             
             if (i+1) % 10 == 0:
                 print(f"Processed {i+1}/{total} wards...")
                 
         except Exception as e:
-            print(f"Failed to process ward {ward_id}: {e}")
-            results.append({
-                "ward_id": ward_id,
-                "ndvi": 0.0
-            })
+            # Leave the value empty: 0.0 would claim the ward has no vegetation
+            print(f"Failed to process ward {ward_name}: {e}")
+            results.append({"Ward_Name": ward_name, "ndvi_mean": None})
 
-    df = pd.DataFrame(results)
-    df.to_csv(output_path, index=False)
+    expected = [f.get("properties", {}).get("Ward_Name") for f in features]
+    try:
+        write_ndvi_table(results, expected, output_path)
+    except NdviSchemaError as e:
+        print(f"Not saving NDVI data: {e}")
+        sys.exit(1)
     print(f"Saved NDVI data to {output_path}")
 
 if __name__ == "__main__":
