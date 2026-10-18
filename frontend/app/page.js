@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { BASE_URL, getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
+import { getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
 import { getAqiColor, getAqiLabel, SOURCE_INFO } from '@/lib/aqi';
 import Card from '@/components/common/Card';
 import CountUp from '@/components/common/CountUp';
@@ -600,29 +600,14 @@ export default function Home() {
   const [history, setHistory] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState({ wardId: null, data: null });
-  const [error, setError] = useState(null);
-  const [attempt, setAttempt] = useState(0);
+  const [error, setError] = useState(false);
 
-  // Fire all requests at once; each card renders as soon as its data lands.
-  // Hosted backends can take a while to wake, so retry a few times on failure.
+  // Fire all requests at once; each card renders as soon as its data lands
   useEffect(() => {
-    let retryTimer;
-    getForecast('delhi')
-      .then((d) => {
-        if (!d?.wards?.length) throw new Error(d?.error || 'The API returned no ward data');
-        setError(null);
-        setData(d);
-      })
-      .catch((err) => {
-        setError(err.message === 'Failed to fetch' || err.name === 'TypeError'
-          ? 'No response (the server is not running, the URL is wrong, or CORS blocked this site)'
-          : err.message);
-        if (attempt < 4) retryTimer = setTimeout(() => setAttempt((a) => a + 1), 3000 * 2 ** attempt);
-      });
+    getForecast('delhi').then((d) => (d?.wards?.length ? setData(d) : setError(true))).catch(() => setError(true));
     getTimeline('delhi').then(setTimeline).catch(() => {});
     getHistory('delhi', { hours: 720 }).then(setHistory).catch(() => {});
-    return () => clearTimeout(retryTimer);
-  }, [attempt]);
+  }, []);
 
   const wards = useMemo(() => data?.wards ?? [], [data]);
   const worst = useMemo(() => [...wards].sort((a, b) => b.current_aqi - a.current_aqi), [wards]);
@@ -637,15 +622,10 @@ export default function Home() {
   const wardDetail = detail.wardId === selectedWard?.ward_id ? detail.data : null;
   const latest = history?.series?.[history.series.length - 1];
 
-  if (error && !data) return (
-    <div className="api-error">
-      <p className="api-error-title">Couldn&apos;t reach the Atmos API</p>
-      <p>{error}</p>
-      <p>
-        Tried <code>{BASE_URL}/api/forecast/delhi</code>
-        {attempt < 4 ? ' · retrying automatically…' : ''}
-      </p>
-      <button className="api-error-retry" onClick={() => setAttempt((a) => a + 1)}>Retry now</button>
+  if (error) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)', flexDirection: 'column', gap: '10px' }}>
+      <p style={{ fontSize: '18px', color: '#ef4444' }}>Couldn&apos;t reach the Atmos API</p>
+      <p>The server may be waking up. Please refresh in a minute.</p>
     </div>
   );
 
