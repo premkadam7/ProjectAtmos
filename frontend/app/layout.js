@@ -1,4 +1,5 @@
 import { Inter, Playfair_Display } from 'next/font/google';
+import { preload } from 'react-dom';
 import './globals.css';
 import Sidebar from '@/components/Sidebar';
 import TopBar from '@/components/TopBar';
@@ -24,6 +25,9 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
+  // Ward boundaries feed every map; start the download alongside the API calls
+  preload('/data/delhi_wards.geojson', { as: 'fetch', crossOrigin: 'anonymous' });
+
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body className={inter.className}>

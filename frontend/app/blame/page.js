@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getForecast, getBlame } from '@/lib/api';
+import { getAqiColor } from '@/lib/aqi';
 
 const blameColors = {
   'Traffic & Time': '#3b82f6',
@@ -10,14 +11,6 @@ const blameColors = {
   'Weather': '#06b6d4',
 };
 
-function getAqiColor(aqi) {
-  if (aqi <= 50) return '#4ade80';
-  if (aqi <= 100) return '#a3e635';
-  if (aqi <= 200) return '#facc15';
-  if (aqi <= 300) return '#fb923c';
-  if (aqi <= 400) return '#f97316';
-  return '#ef4444';
-}
 
 export default function BlamePage() {
   const [allWards, setAllWards] = useState([]);

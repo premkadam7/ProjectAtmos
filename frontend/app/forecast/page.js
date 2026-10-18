@@ -1,39 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getForecast, getWardDetail, getBlame } from '@/lib/api';
+import { getForecast, getWardDetail, getBlame, getTimeline } from '@/lib/api';
 import Card from '@/components/common/Card';
+import { getAqiColor, getAqiLabel } from '@/lib/aqi';
 import dynamic from 'next/dynamic';
 
-const AqiMap = dynamic(() => import('@/components/common/AqiMap'), {
+const PredictionMap = dynamic(() => import('@/components/common/PredictionMap'), {
   ssr: false,
-  loading: () => (
-    <div style={{ height: '500px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
-      Loading map…
-    </div>
-  ),
+  loading: () => <div className="skeleton" style={{ height: 600, borderRadius: 20 }} />,
 });
 
 const CHART_ACCENT = '#5cb9ad';
 
-function getAqiColor(aqi) {
-  if (aqi == null) return '#6b7280';
-  if (aqi <= 50) return '#4ade80';
-  if (aqi <= 100) return '#a3e635';
-  if (aqi <= 200) return '#facc15';
-  if (aqi <= 300) return '#fb923c';
-  if (aqi <= 400) return '#f97316';
-  return '#ef4444';
-}
 
-function getAqiLabel(aqi) {
-  if (aqi <= 50) return 'Good';
-  if (aqi <= 100) return 'Satisfactory';
-  if (aqi <= 200) return 'Moderate';
-  if (aqi <= 300) return 'Poor';
-  if (aqi <= 400) return 'Very Poor';
-  return 'Severe';
-}
 
 function getTrendIcon(trend) {
   if (trend === 'worsening') return '↑';
@@ -241,9 +221,11 @@ export default function ForecastPage() {
   const [detailState, setDetailState]   = useState({ wardId: null, data: null });
   const [blameState, setBlameState]     = useState({ wardId: null, data: null });
   const [search, setSearch]             = useState('');
+  const [timeline, setTimeline]         = useState(null);
 
   useEffect(() => {
     getForecast('delhi').then(setForecastData);
+    getTimeline('delhi').then(setTimeline).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -275,7 +257,7 @@ export default function ForecastPage() {
         <div>
           <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)' }}>Forecast Map</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Hyperlocal 24-72hr AQI forecast — click any ward for details
+            Ward-level AQI predictions for the next 72 hours — scrub the timeline, click a station for details
           </p>
         </div>
 
@@ -327,15 +309,16 @@ export default function ForecastPage() {
       </div>
 
       {/* Map */}
-      <Card style={{ padding: 0, overflow: 'visible' }}>
-        {forecastData ? (
-          <AqiMap wards={wards} onWardClick={handleWardClick} />
-        ) : (
-          <div style={{ height: '500px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>
-            Loading map…
-          </div>
-        )}
-      </Card>
+      {forecastData ? (
+        <PredictionMap
+          wards={wards}
+          timeline={timeline}
+          selectedWardId={selectedWard?.ward_id}
+          onWardClick={handleWardClick}
+          height={600}
+          showVulnerable
+        />
+      ) : <div className="skeleton" style={{ height: 600, borderRadius: 20 }} />}
 
       {/* Ward summary table */}
       <Card title="All Wards — AQI Summary">
