@@ -1,15 +1,32 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import os
+import threading
 import uvicorn
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from routers import forecast, blame, enforce, chat, vulnerable, whatif
+from routers import forecast, blame, enforce, chat, vulnerable, whatif, history
+from services.live_pipeline import start_background_refresh
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_background_refresh()
+    # Build the first snapshot and load SHAP before the first request needs them
+    threading.Thread(target=_warm_up, daemon=True).start()
+    yield
+
+def _warm_up():
+    from models.forecaster import get_ward_blame, get_city_overview
+    overview = get_city_overview()
+    if overview:
+        get_ward_blame(overview[0]["ward_id"])
 
 app = FastAPI(
+    lifespan=lifespan,
     title="Atmos API",
     description="Backend for Atmos — Urban Air Quality Intelligence for Delhi",
     version="0.1.0",
@@ -30,6 +47,7 @@ app.include_router(enforce.router)
 app.include_router(chat.router)
 app.include_router(vulnerable.router)
 app.include_router(whatif.router)
+app.include_router(history.router)
 
 @app.get("/api/health", tags=["health"])
 def health_check():
