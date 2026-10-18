@@ -90,23 +90,34 @@ _EPA_PM10 = [
 
 # ── Static resources ────────────────────────────────────────────────────────
 
-_resources = {}
+_resources = None
+_resources_lock = threading.Lock()
 
 
 def _load_resources():
-    if _resources:
-        return _resources
-    _resources["models"] = {
-        q: joblib.load(os.path.join(MODEL_DIR, f"champion_{q}.pkl")) for q in ("q10", "q50", "q90")
-    }
-    _resources["feature_names"] = joblib.load(os.path.join(MODEL_DIR, "feature_names.pkl"))
+    """Models and static station data, loaded once.
 
-    sample = pd.read_csv(os.path.join(CACHE_DIR, "features_delhi.csv"))
-    sample["timestamp"] = pd.to_datetime(sample["timestamp"])
-    _resources["sample"] = sample
-    _resources["stations"] = (
-        sample.groupby("station", as_index=False)[["lat", "lon", *STATIC_COLUMNS]].first()
-    )
+    The bundle is built completely before it is published, so concurrent
+    callers (refresh thread, warm-up, requests) never see a partial one.
+    """
+    global _resources
+    if _resources is not None:
+        return _resources
+    with _resources_lock:
+        if _resources is None:
+            models = {
+                q: joblib.load(os.path.join(MODEL_DIR, f"champion_{q}.pkl")) for q in ("q10", "q50", "q90")
+            }
+            feature_names = joblib.load(os.path.join(MODEL_DIR, "feature_names.pkl"))
+            sample = pd.read_csv(os.path.join(CACHE_DIR, "features_delhi.csv"))
+            sample["timestamp"] = pd.to_datetime(sample["timestamp"])
+            stations = sample.groupby("station", as_index=False)[["lat", "lon", *STATIC_COLUMNS]].first()
+            _resources = {
+                "models": models,
+                "feature_names": feature_names,
+                "sample": sample,
+                "stations": stations,
+            }
     return _resources
 
 

@@ -1,4 +1,5 @@
 import math
+import threading
 
 import pandas as pd
 
@@ -93,6 +94,7 @@ def get_history(ward_id: str = None, hours: int = 24 * 30):
 
 
 _shap_explainer = None
+_shap_lock = threading.Lock()
 
 
 def _model_resources():
@@ -107,7 +109,9 @@ def get_ward_blame(ward_id: str):
 
     models, feature_names = _model_resources()
     if _shap_explainer is None:
-        _shap_explainer = shap.TreeExplainer(models['q50'])
+        with _shap_lock:
+            if _shap_explainer is None:
+                _shap_explainer = shap.TreeExplainer(models['q50'])
 
     row = _latest_row(ward_id)
     X = row[feature_names].values.astype(float).reshape(1, -1)
