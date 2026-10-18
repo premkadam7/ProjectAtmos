@@ -3,27 +3,7 @@ from typing import Optional
 from datetime import datetime, timezone
 import uuid
 from models.forecaster import get_city_overview, get_ward_blame, run_whatif_simulation
-import os
-import json
-import pandas as pd
-
-_pop_data = None
-_vuln_data = None
-
-def _load_data():
-    global _pop_data, _vuln_data
-    if _pop_data is None:
-        try:
-            df = pd.read_csv(os.path.join(os.path.dirname(__file__), "..", "data_store", "cache", "delhi_wards_population.csv"))
-            _pop_data = {str(row["ward_name"]).upper(): row["population"] for _, row in df.iterrows() if not pd.isna(row["population"])}
-        except:
-            _pop_data = {}
-    if _vuln_data is None:
-        try:
-            with open(os.path.join(os.path.dirname(__file__), "..", "data_store", "geojson", "vulnerable_locations.geojson")) as f:
-                _vuln_data = json.load(f).get("features", [])
-        except:
-            _vuln_data = []
+from services.places import reference_data, ward_facility_count, ward_population
 
 router = APIRouter(prefix="/api/enforce", tags=["enforcement"])
 
@@ -39,7 +19,6 @@ def get_enforcement_tickets(
     city: str,
     source: Optional[str] = Query(None, description="Filter by primary cause")
 ):
-    _load_data()
     overview = get_city_overview()
     if not overview:
         return {"error": "No forecast data available"}
@@ -68,11 +47,11 @@ def get_enforcement_tickets(
         else:
             urgency = "LOW"
 
-        ward_name_upper = w["ward_name"].upper()
-        pop = _pop_data.get(ward_name_upper, 50000)
-        
-        schools = sum(1 for v in _vuln_data if v.get("properties", {}).get("ward_name", "").upper() == ward_name_upper and v.get("properties", {}).get("type") == "school")
-        hospitals = sum(1 for v in _vuln_data if v.get("properties", {}).get("ward_name", "").upper() == ward_name_upper and v.get("properties", {}).get("type") == "hospital")
+        # Joined on the canonical id of the ward polygon containing the
+        # station; None means the figure is unknown, not zero.
+        pop = ward_population(w["ward_id"])
+        schools = ward_facility_count(w["ward_id"], "school")
+        hospitals = ward_facility_count(w["ward_id"], "hospital")
 
         cause_to_intervention = {
             "Traffic & Time": "restrict_traffic",
@@ -100,14 +79,22 @@ def get_enforcement_tickets(
             "estimated_aqi_reduction": f"{reduction_pct:.1f}%",
             "estimated_aqi_reduction_pct": reduction_pct,
             "intervention_action": intervention.replace("_", " ").title(),
-            "affected_population": int(pop),
+            "affected_population": pop,
             "schools_in_zone": schools,
             "hospitals_in_zone": hospitals,
             "generated_at": datetime.now(timezone.utc).isoformat(),
         })
 
+    ref = reference_data()
     return {
         "city": city,
+        "impact_data_note": (
+            "Population and facility counts are for the municipal ward containing each monitoring station. "
+            "Missing population figures are reported as unknown. "
+            + ("Facility counts use verified OpenStreetMap records only."
+               if ref["facilities_verified"] else
+               "No verified facility data is available, so school and hospital counts are unknown.")
+        ),
         "total_tickets": len(tickets),
         "high_urgency_count": sum(1 for t in tickets if t["urgency"] == "HIGH"),
         "wards_affected": len(tickets),

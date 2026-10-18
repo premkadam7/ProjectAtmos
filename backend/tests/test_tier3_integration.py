@@ -120,78 +120,57 @@ def test_chat_session_context(client):
     assert "Dwarka" in parsed_chat_3.response
 
 # Scenario 4: Vulnerable locations / Enforcement ticket correlation
-def test_vulnerable_enforcement_ticket_correlation(client):
-    # 1. Fetch enforcement tickets
-    enforce_resp = client.get("/api/enforce/delhi")
-    assert enforce_resp.status_code == 200
-    enforce_data = enforce_resp.json()
-    parsed_enforce = EnforcementResponse(**enforce_data)
-    assert len(parsed_enforce.tickets) > 0
+def _facility(lon, lat, kind, ward_name, verified):
+    props = {"name": f"{kind} test", "type": kind, "ward_id": "X", "ward_name": ward_name}
+    props.update({"source": "osm", "osm_id": 1, "synthetic": False} if verified
+                 else {"source": "synthetic-demo", "synthetic": True})
+    return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]}, "properties": props}
 
-    # Pick the first ticket
-    ticket = parsed_enforce.tickets[0]
-    ward_id = ticket.ward_id
-    ward_name = ticket.ward_name
-    expected_schools = ticket.schools_in_zone
-    expected_hospitals = ticket.hospitals_in_zone
 
-    # Mock the GeoJSON reading inside routers/vulnerable.py to align counts perfectly
-    mock_features = []
-    for i in range(expected_schools):
-        mock_features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [77.123, 28.567]},
-            "properties": {
-                "name": f"{ward_name} Public School {i}",
-                "type": "school",
-                "ward_id": ward_id,
-                "ward_name": ward_name
-            }
-        })
-    for i in range(expected_hospitals):
-        mock_features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [77.123, 28.567]},
-            "properties": {
-                "name": f"{ward_name} General Hospital {i}",
-                "type": "hospital",
-                "ward_id": ward_id,
-                "ward_name": ward_name
-            }
-        })
-    # Add a random elderly care center to ensure other types are present
-    mock_features.append({
-        "type": "Feature",
-        "geometry": {"type": "Point", "coordinates": [77.123, 28.567]},
-        "properties": {
-            "name": f"{ward_name} Senior Citizen Home",
-            "type": "elderly_care",
-            "ward_id": ward_id,
-            "ward_name": ward_name
-        }
-    })
+def test_enforcement_counts_only_verified_facilities_in_ward(client, tmp_path, monkeypatch):
+    """Ticket facility counts = verified facilities inside the station's ward polygon."""
+    import geopandas as gpd
+    from services import places
 
-    mock_geojson = {
-        "type": "FeatureCollection",
-        "features": mock_features
-    }
+    ticket = client.get("/api/enforce/delhi").json()["tickets"][0]
+    wards = gpd.read_file(places.WARDS_PATH)
+    wards["ward_id"] = wards["Ward_Name"].map(places.normalize_ward_name)
+    ward = wards[wards["ward_id"] == ticket["ward_id"]].iloc[0]
+    inside = ward.geometry.representative_point()
+    outside = wards[wards["ward_id"] != ticket["ward_id"]].iloc[0].geometry.representative_point()
 
-    mock_geojson_str = json.dumps(mock_geojson)
+    features = [
+        _facility(inside.x, inside.y, "school", ward.Ward_Name, verified=True),
+        _facility(inside.x, inside.y, "school", ward.Ward_Name, verified=True),
+        _facility(inside.x, inside.y, "hospital", ward.Ward_Name, verified=True),
+        _facility(inside.x, inside.y, "school", ward.Ward_Name, verified=False),   # synthetic: excluded
+        _facility(outside.x, outside.y, "hospital", "elsewhere", verified=True),  # other ward: excluded
+    ]
+    path = tmp_path / "facilities.geojson"
+    path.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    monkeypatch.setattr(places, "FACILITIES_PATH", str(path))
+    places.reset_cache()
+    try:
+        t = next(t for t in client.get("/api/enforce/delhi").json()["tickets"] if t["ward_id"] == ticket["ward_id"])
+        assert t["schools_in_zone"] == 2
+        assert t["hospitals_in_zone"] == 1
+    finally:
+        places.reset_cache()
 
-    # Patch the geojson file reading to return our mock structure
-    with patch("builtins.open", mock_open(read_data=mock_geojson_str)):
-        with patch("os.path.exists", return_value=True):
-            # 2. Get vulnerable locations in Delhi
-            vulnerable_resp = client.get("/api/vulnerable/delhi")
-            assert vulnerable_resp.status_code == 200
-            vulnerable_data = vulnerable_resp.json()
-            parsed_vulnerable = VulnerableResponse(**vulnerable_data)
 
-            # Filter vulnerable locations by ticketed ward
-            ward_vulnerables = [loc for loc in parsed_vulnerable.locations if loc.ward_id == ward_id]
-            schools_in_ward = sum(1 for loc in ward_vulnerables if loc.type == "school")
-            hospitals_in_ward = sum(1 for loc in ward_vulnerables if loc.type == "hospital")
+def test_enforcement_reports_unknown_instead_of_defaults(client):
+    """Bundled facilities are synthetic and some wards lack census data: report unknown, not 0 or 50,000."""
+    from services import places
+    data = client.get("/api/enforce/delhi").json()
+    assert "unknown" in data["impact_data_note"]
+    for t in data["tickets"]:
+        assert t["schools_in_zone"] is None and t["hospitals_in_zone"] is None
+        assert t["affected_population"] != 50000
+        assert t["affected_population"] == places.ward_population(t["ward_id"])
 
-            # Verify counts match the metadata inside the ticket
-            assert schools_in_ward == expected_schools
-            assert hospitals_in_ward == expected_hospitals
+
+def test_vulnerable_endpoint_flags_synthetic_records(client):
+    data = client.get("/api/vulnerable/delhi").json()
+    assert data["verified_locations"] == 0
+    assert "synthetic" in data["data_note"]
+    assert all(loc["source"] == "synthetic-demo" and not loc["verified"] for loc in data["locations"])

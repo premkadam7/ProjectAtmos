@@ -89,14 +89,15 @@ class EnforcementTicket(BaseModel):
     estimated_aqi_reduction: str
     estimated_aqi_reduction_pct: Optional[float] = None
     intervention_action: Optional[str] = None
-    affected_population: int
-    schools_in_zone: int
-    hospitals_in_zone: int
+    affected_population: Optional[int] = Field(None, description="Population of the ward containing the station; null if unknown")
+    schools_in_zone: Optional[int] = Field(None, description="Verified schools in that ward; null if unknown")
+    hospitals_in_zone: Optional[int] = Field(None, description="Verified hospitals in that ward; null if unknown")
     generated_at: datetime
 
 
 class EnforcementResponse(BaseModel):
     city: str
+    impact_data_note: Optional[str] = None
     total_tickets: int
     high_urgency_count: int
     wards_affected: int
@@ -127,11 +128,15 @@ class VulnerableLocation(BaseModel):
     lon: float
     ward_id: str
     ward_name: str
+    source: str = Field("unknown", description="osm / synthetic-demo / unknown")
+    verified: bool = Field(False, description="True only for real OpenStreetMap records")
 
 
 class VulnerableResponse(BaseModel):
     city: str
     total_locations: int
+    verified_locations: int = 0
+    data_note: Optional[str] = None
     locations: list[VulnerableLocation]
 
 

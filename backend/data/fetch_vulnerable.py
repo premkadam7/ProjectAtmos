@@ -2,6 +2,8 @@ import os
 import sys
 import json
 import random
+from datetime import datetime, timezone
+
 import httpx
 
 # Ensure we can import modules from backend
@@ -23,6 +25,7 @@ def _resolve_col(gdf, candidates):
     return candidates[-1]
 
 def generate_synthetic_locations():
+    """Placeholder facilities for demos. Every record is flagged synthetic."""
     locations = []
     try:
         gdf = get_wards_gdf()
@@ -142,7 +145,20 @@ out center;"""
         print(f"Failed to fetch from Overpass API (will use fallback): {e}")
         return None
 
+def _has_verified_records(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            features = json.load(f).get("features", [])
+    except (OSError, ValueError):
+        return False
+    return any(
+        not ft.get("properties", {}).get("synthetic", False) and ft.get("properties", {}).get("source") == "osm"
+        for ft in features
+    )
+
+
 def main():
+    fetched_at = datetime.now(timezone.utc).isoformat()
     data = fetch_from_overpass()
     
     locations = []
@@ -205,14 +221,22 @@ def main():
                 "lat": lat,
                 "lon": lon,
                 "ward_id": ward_id,
-                "ward_name": ward_name
+                "ward_name": ward_name,
+                "source": "osm",
+                "osm_type": elem.get("type"),
+                "osm_id": elem.get("id"),
+                "fetched_at": fetched_at,
+                "synthetic": False,
             })
-            
+
     if not locations:
-        print("No locations fetched or request failed/returned empty. Using high-quality synthetic fallback...")
-        locations = generate_synthetic_locations()
+        if _has_verified_records(output_path):
+            print("Overpass fetch failed; keeping the existing verified OpenStreetMap data unchanged.")
+            return
+        print("No locations fetched. Writing SYNTHETIC placeholder locations (not real facilities)...")
+        locations = [dict(loc, source="synthetic-demo", synthetic=True) for loc in generate_synthetic_locations()]
         print(f"Generated {len(locations)} synthetic locations.")
-        
+
     # Convert locations list to GeoJSON FeatureCollection
     features = []
     for loc in locations:
@@ -222,12 +246,7 @@ def main():
                 "type": "Point",
                 "coordinates": [loc["lon"], loc["lat"]]
             },
-            "properties": {
-                "name": loc["name"],
-                "type": loc["type"],
-                "ward_id": loc["ward_id"],
-                "ward_name": loc["ward_name"]
-            }
+            "properties": {k: v for k, v in loc.items() if k not in ("lat", "lon")}
         }
         features.append(feature)
         

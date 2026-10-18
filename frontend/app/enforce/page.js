@@ -40,7 +40,8 @@ export default function EnforcePage() {
         return order[a.urgency] - order[b.urgency];
       }
       if (sort === 'aqi') return b.current_aqi - a.current_aqi;
-      if (sort === 'population') return b.affected_population - a.affected_population;
+      // Unknown populations sort last
+      if (sort === 'population') return (b.affected_population ?? -1) - (a.affected_population ?? -1);
       return 0;
     });
 
@@ -53,6 +54,9 @@ export default function EnforcePage() {
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
           Prioritised, evidence-backed enforcement recommendations for city authorities
         </p>
+        {data?.impact_data_note && (
+          <p style={{ fontSize: '12px', color: 'var(--text-dim)', marginTop: '6px' }}>{data.impact_data_note}</p>
+        )}
       </div>
 
       {/* Summary bar */}
@@ -166,8 +170,13 @@ export default function EnforcePage() {
 
                   <div style={{ display: 'flex', gap: '16px', marginTop: '10px' }}>
                     <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-                      👥 {ticket.affected_population.toLocaleString()} people
+                      👥 {ticket.affected_population != null
+                        ? `${ticket.affected_population.toLocaleString()} people in ward`
+                        : 'Ward population unknown'}
                     </span>
+                    {ticket.schools_in_zone == null && ticket.hospitals_in_zone == null && (
+                      <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>🏫🏥 Facility counts unknown</span>
+                    )}
                     {ticket.schools_in_zone > 0 && (
                       <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
                         🏫 {ticket.schools_in_zone} school{ticket.schools_in_zone > 1 ? 's' : ''}

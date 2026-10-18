@@ -2,6 +2,7 @@ import os
 import json
 from fastapi import APIRouter, HTTPException
 from models.schemas import VulnerableResponse, VulnerableLocation
+from services.places import is_verified
 
 router = APIRouter(prefix="/api/vulnerable", tags=["vulnerable"])
 
@@ -59,12 +60,23 @@ def get_vulnerable_locations(city: str):
                     lat=lat,
                     lon=lon,
                     ward_id=props.get("ward_id", "Unknown"),
-                    ward_name=props.get("ward_name", "Unknown")
+                    ward_name=props.get("ward_name", "Unknown"),
+                    source="synthetic-demo" if props.get("synthetic") else props.get("source", "unknown"),
+                    verified=is_verified(props),
                 )
             )
             
+    verified = sum(1 for loc in locations if loc.verified)
+    if verified == len(locations):
+        note = None
+    elif verified == 0:
+        note = "These are synthetic placeholder locations, not real facilities."
+    else:
+        note = f"{len(locations) - verified} of {len(locations)} locations are synthetic placeholders."
     return VulnerableResponse(
         city=city,
         total_locations=len(locations),
+        verified_locations=verified,
+        data_note=note,
         locations=locations
     )
