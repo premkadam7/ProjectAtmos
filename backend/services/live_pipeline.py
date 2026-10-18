@@ -21,11 +21,13 @@ sample dataset (Dec 2024) and is labelled as such.
 import logging
 import math
 import os
-import pickle
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+
+from filelock import FileLock
+from services.input_cache import atomic_pickle, read_pickle, request_json, incremental_frame
 
 import joblib
 import numpy as np
@@ -40,7 +42,8 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MODEL_DIR = os.path.join(BACKEND_DIR, "data_store", "models")
 CACHE_DIR = os.path.join(BACKEND_DIR, "data_store", "cache")
-SNAPSHOT_PATH = os.path.join(CACHE_DIR, "live_snapshot.pkl")
+RUNTIME_DIR = os.getenv("ATMOS_CACHE_DIR", os.path.join(CACHE_DIR, "runtime"))
+SNAPSHOT_PATH = os.path.join(RUNTIME_DIR, "live_snapshot.pkl")
 
 AQ_URL = "https://air-quality-api.open-meteo.com/v1/air-quality"
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
@@ -61,7 +64,6 @@ WEATHER_VARS = [
 RAW_COLUMNS = ["timestamp", "station", "lat", "lon", *POLLUTANTS, "aqi", *WEATHER_VARS]
 STATIC_COLUMNS = ["ward_id", "ndvi_mean", "population_density_per_km2"]
 
-HISTORY_DAYS = 31
 HORIZON_HOURS = 72
 MODEL_LEAD_HOURS = 24          # the models predict PM2.5 this many hours ahead
 ANCHOR_HALF_LIFE_HOURS = 6     # how quickly the forecast hands over from observation to model
@@ -71,7 +73,6 @@ RATIO_BOUNDS = (0.25, 4.0)
 LIVE_ENABLED = os.getenv("ATMOS_LIVE", "1") != "0"
 REFRESH_SECONDS = int(os.getenv("ATMOS_REFRESH_MINUTES", "30")) * 60
 FIRST_LIVE_WAIT_SECONDS = 20
-MAX_SNAPSHOT_AGE_HOURS = 6
 # Live observations older than this are reported as stale (refreshes failing)
 STALE_AFTER_MINUTES = int(os.getenv("ATMOS_STALE_AFTER_MINUTES", "120"))
 
@@ -123,22 +124,22 @@ def _load_resources():
 
 # ── Fetching ────────────────────────────────────────────────────────────────
 
-def fetch_air_quality(stations: pd.DataFrame, past_days: int = HISTORY_DAYS) -> pd.DataFrame:
-    """Hourly CAMS pollutants (UTC labels) for every station: history plus 3-day forecast."""
+def fetch_air_quality(stations: pd.DataFrame, past_days: int = 3) -> pd.DataFrame:
+    """Hourly CAMS pollutants (UTC labels), with five calendar days of forecast."""
     params = {
         "latitude": ",".join(f"{v:.4f}" for v in stations["lat"]),
         "longitude": ",".join(f"{v:.4f}" for v in stations["lon"]),
         "hourly": ",".join(AQ_VARS),
         "past_days": past_days,
-        "forecast_days": 3,
+        "forecast_days": 5,
         "timezone": "GMT",
     }
-    resp = requests.get(AQ_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    payload = resp.json()
+    payload = request_json(AQ_URL, params, RUNTIME_DIR)
     if isinstance(payload, dict):
         payload = [payload]
 
+    if len(payload) != len(stations):
+        raise RuntimeError("Air-quality provider returned incomplete station coverage")
     frames = []
     for st, loc in zip(stations.itertuples(), payload):
         hourly = loc["hourly"]
@@ -151,19 +152,17 @@ def fetch_air_quality(stations: pd.DataFrame, past_days: int = HISTORY_DAYS) -> 
     return pd.concat(frames, ignore_index=True)
 
 
-def fetch_weather(past_days: int = HISTORY_DAYS) -> pd.DataFrame:
-    """City-centre hourly weather with Asia/Kolkata time labels, as in training."""
+def fetch_weather(past_days: int = 3) -> pd.DataFrame:
+    """City-centre hourly weather aligned to the UTC pollutant timestamps."""
     params = {
         "latitude": 28.6139,
         "longitude": 77.2090,
         "hourly": ",".join(WEATHER_VARS),
         "past_days": past_days,
         "forecast_days": 5,
-        "timezone": "Asia/Kolkata",
+        "timezone": "GMT",
     }
-    resp = requests.get(WEATHER_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    hourly = resp.json()["hourly"]
+    hourly = request_json(WEATHER_URL, params, RUNTIME_DIR)["hourly"]
     df = pd.DataFrame({v: hourly[v] for v in WEATHER_VARS})
     df.insert(0, "timestamp", pd.to_datetime(hourly["time"]))
     return df
@@ -215,7 +214,7 @@ def fetch_ground_stations(token: str) -> pd.DataFrame:
         if pm25 is None:
             continue
         observed = pd.to_datetime(feed.get("time", {}).get("iso"), utc=True, errors="coerce")
-        if pd.isna(observed) or (now - observed).total_seconds() > GROUND_MAX_AGE_HOURS * 3600:
+        if pd.isna(observed) or not -300 <= (now - observed).total_seconds() <= GROUND_MAX_AGE_HOURS * 3600:
             continue
         geo = feed.get("city", {}).get("geo") or [None, None]
         rows.append({
@@ -258,6 +257,7 @@ def calibrate(stations: pd.DataFrame, cams_now: pd.DataFrame, ground: pd.DataFra
     out["ratio_pm25"] = np.nan
     out["ratio_pm10"] = np.nan
     out["ground_station"] = None
+    out["ground_observed_at"] = None
 
     if ground is not None and not ground.empty:
         for i, st in out.iterrows():
@@ -269,6 +269,7 @@ def calibrate(stations: pd.DataFrame, cams_now: pd.DataFrame, ground: pd.DataFra
                 if g.pm10 is not None and not pd.isna(g.pm10):
                     out.at[i, "ratio_pm10"] = g.pm10 / max(st.cams_pm10, 1.0)
                 out.at[i, "ground_station"] = g["name"]
+                out.at[i, "ground_observed_at"] = g["observed_at"].isoformat()
 
     for col in ("ratio_pm25", "ratio_pm10"):
         out[col] = out[col].clip(*RATIO_BOUNDS)
@@ -403,6 +404,8 @@ def assemble_snapshot(raw, stations, now, calib, source, source_detail, ground_c
             "cigarette_equivalent": round(current_pm25 / 22.0, 1),
             "calibration_ratio": round(r25, 3),
             "ground_station": c.ground_station,
+            "ground_observed_at": c.ground_observed_at,
+            "estimate_kind": "ground-calibrated" if c.ground_station else ("spatially-calibrated" if ground_count else "regional-model"),
             "hourly": hourly,
         })
 
@@ -436,10 +439,14 @@ def build_live_snapshot():
     res = _load_resources()
     stations = res["stations"]
 
-    aq = fetch_air_quality(stations)
-    weather = fetch_weather()
-    # Training merged UTC-labelled pollutants with IST-labelled weather on the
-    # raw label; the model learned that alignment, so inference repeats it.
+    import hashlib
+    signature = hashlib.sha256(stations[["station", "lat", "lon"]].to_csv(index=False).encode()).hexdigest()[:12]
+    aq = incremental_frame(os.path.join(RUNTIME_DIR, f"aq-{signature}.pkl"),
+                           lambda days: fetch_air_quality(stations, days), ["station", "timestamp"])
+    weather = incremental_frame(os.path.join(RUNTIME_DIR, "weather-utc.pkl"),
+                                fetch_weather, ["timestamp"])
+    # Both providers use UTC. Legacy models need revalidation after correcting
+    # the old training alignment; never merge different time zones by clock label.
     raw = aq.merge(weather, on="timestamp", how="inner")
     raw["aqi"] = np.nan
 
@@ -448,6 +455,11 @@ def build_live_snapshot():
     if raw["timestamp"].max() < needed_end:
         raise RuntimeError("Live data does not extend far enough ahead for the forecast")
 
+    required = pd.date_range(now - pd.Timedelta(hours=48), needed_end, freq="h")
+    for station in stations.station:
+        rows = raw[raw.station == station].set_index("timestamp").reindex(required)
+        if rows[[*POLLUTANTS, *WEATHER_VARS]].isna().any().any():
+            raise RuntimeError(f"Incomplete hourly coverage for {station}")
     cams_now = raw[raw["timestamp"] == now][["station", "pm25", "pm10"]]
 
     token = os.getenv("WAQI_TOKEN")
@@ -512,18 +524,31 @@ def _set_snapshot(snap):
 
 
 def _load_persisted():
-    try:
-        with open(SNAPSHOT_PATH, "rb") as f:
-            snap = pickle.load(f)
-        age = datetime.now(timezone.utc) - datetime.fromisoformat(snap["generated_at"])
-        if age.total_seconds() <= MAX_SNAPSHOT_AGE_HOURS * 3600:
-            return snap
-    except Exception:
-        pass
+    snap = read_pickle(SNAPSHOT_PATH)
+    # Old live data is preferable to an unrelated historical demo; freshness
+    # remains based on its original timestamp, even after a process restart.
+    if isinstance(snap, dict) and snap.get("source") in ("live", "model-only"):
+        return snap
     return None
 
 
 def refresh_live():
+    os.makedirs(RUNTIME_DIR, exist_ok=True)
+    # The lock plus timestamp check avoids each Gunicorn worker polling APIs.
+    with FileLock(SNAPSHOT_PATH + ".lock", timeout=180):
+        persisted = _load_persisted()
+        if persisted:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(persisted["generated_at"])).total_seconds()
+            if 0 <= age < REFRESH_SECONDS:
+                _set_snapshot(persisted)
+                with _lock:
+                    _refresh_status.update(last_success=persisted["generated_at"], last_error=None, consecutive_failures=0)
+                _first_live_done.set()
+                return True
+        return _refresh_live_unlocked()
+
+
+def _refresh_live_unlocked():
     attempted = datetime.now(timezone.utc).isoformat()
     try:
         snap = build_live_snapshot()
@@ -533,8 +558,7 @@ def refresh_live():
                 last_attempt=attempted, last_success=attempted, last_error=None, consecutive_failures=0,
             )
         try:
-            with open(SNAPSHOT_PATH, "wb") as f:
-                pickle.dump(snap, f)
+            atomic_pickle(SNAPSHOT_PATH, snap)
         except OSError as e:
             logger.warning("Could not persist snapshot: %s", e)
         logger.info("Live snapshot refreshed (%s)", snap["source"])
@@ -553,8 +577,14 @@ def refresh_live():
 
 def _refresh_loop():
     while True:
-        refresh_live()
-        time.sleep(REFRESH_SECONDS)
+        try:
+            refresh_live()
+        except Exception as exc:
+            # Lock/storage failures must not permanently kill the refresh thread.
+            logger.warning("Refresh coordination failed: %s", type(exc).__name__)
+            _first_live_done.set()
+        failures = _refresh_status["consecutive_failures"]
+        time.sleep(min(REFRESH_SECONDS * 2 ** min(failures, 3), 6 * 3600))
 
 
 def start_background_refresh():
@@ -590,7 +620,10 @@ def freshness(snap, now=None):
     """
     now = now or datetime.now(timezone.utc)
     observed = datetime.fromisoformat(snap["observed_at"])
-    age_minutes = int((now - observed).total_seconds() // 60)
+    ground_times = [w.get("ground_observed_at") for w in snap.get("wards", []) if w.get("ground_observed_at")]
+    if ground_times:
+        observed = min(observed, *(datetime.fromisoformat(t) for t in ground_times))
+    age_minutes = max(0, int((now - observed).total_seconds() // 60))
     if snap["source"] == "offline-sample":
         status = "sample"
     elif age_minutes > STALE_AFTER_MINUTES:
@@ -601,6 +634,7 @@ def freshness(snap, now=None):
         refresh = dict(_refresh_status)
     return {
         "status": status,
+        "data_timestamp": observed.isoformat(),
         "data_age_minutes": age_minutes,
         "stale_after_minutes": STALE_AFTER_MINUTES,
         "last_successful_refresh": refresh["last_success"],

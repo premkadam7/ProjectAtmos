@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { MapContainer, TileLayer, GeoJSON, Marker, CircleMarker, Tooltip, Pane, useMap, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, GeoJSON, Marker, ZoomControl, CircleMarker, Tooltip, Pane, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
+import { wardEstimate, aqiToPm25 } from '@/lib/spatial';
 import 'leaflet/dist/leaflet.css';
 import {
-  aqiRampColor, getAqiColor, getAqiLabel, idw, loadWardGeometry, formatHourLabel,
+  aqiRampColor, getAqiColor, getAqiLabel, loadWardGeometry, formatHourLabel,
 } from '@/lib/aqi';
 import { getVulnerable } from '@/lib/api';
 
@@ -47,7 +48,8 @@ function ZoomWatcher({ onZoom }) {
 }
 
 // Below this zoom, stations overlap, so they shrink to coloured dots
-const LABEL_MIN_ZOOM = 10;
+const LABEL_MIN_ZOOM = 12;
+const CARTO_KEY = process.env.NEXT_PUBLIC_CARTO_API_KEY;
 
 function stationIcon(aqi, selected, compact) {
   const color = getAqiColor(aqi);
@@ -71,16 +73,20 @@ function stationIcon(aqi, selected, compact) {
 
 export default function PredictionMap({
   wards = [],
-  timeline = null,
+  source = null,
+  timeline: timelineData = null,
   onWardClick,
   selectedWardId = null,
   height = 560,
   showVulnerable = false,
 }) {
+  // A slow/failed timeline request must not combine an old forecast with new inputs.
+  const timeline = timelineData?.observed_at === source?.observed_at ? timelineData : null;
   const [geo, setGeo] = useState(null);
   const [hourIdx, setHourIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [hover, setHover] = useState(null);
+  const [pinnedWard, setPinnedWard] = useState(null);
   const [zoom, setZoom] = useState(11);
   const [vulnData, setVulnData] = useState([]);
   const [vulnNote, setVulnNote] = useState(null);
@@ -119,7 +125,8 @@ export default function PredictionMap({
   const stations = useMemo(() => wards.map((w) => {
     const series = timeline?.wards?.[w.ward_id];
     const value = hourIdx === 0 || !series ? w.current_aqi : series[hourIdx - 1];
-    return { ...w, value };
+    const pm25 = hourIdx === 0 ? w.current_pm25 : aqiToPm25(value);
+    return { ...w, value, pm25 };
   }), [wards, timeline, hourIdx]);
 
   // City-average curve for the timeline sparkline
@@ -137,7 +144,7 @@ export default function PredictionMap({
     const out = new Map();
     if (!geo) return out;
     geo.features.forEach((f) => {
-      out.set(f.properties.Ward_Name, idw(f.properties.centroid, stations));
+      out.set(f.properties.Ward_Name, wardEstimate(f.properties.centroid, stations));
     });
     return out;
   }, [geo, stations]);
@@ -146,7 +153,7 @@ export default function PredictionMap({
   useEffect(() => {
     wardValuesRef.current = wardValues;
     geoRef.current?.eachLayer((layer) => {
-      const v = wardValues.get(layer.feature.properties.Ward_Name);
+      const v = wardValues.get(layer.feature.properties.Ward_Name)?.aqi;
       layer.setStyle({ fillColor: aqiRampColor(v), color: aqiRampColor(v) });
     });
   }, [wardValues]);
@@ -172,21 +179,27 @@ export default function PredictionMap({
         setHover(null);
       },
       click: () => {
-        const st = nearestStation(feature.properties.centroid);
-        if (st && onWardClick) onWardClick(st);
+        setPinnedWard({ name: feature.properties.Ward_Name, centroid: feature.properties.centroid });
       },
     });
   }
 
   const initialStyle = (feature) => {
-    const v = wardValuesRef.current.get(feature.properties.Ward_Name);
+    const v = wardValuesRef.current.get(feature.properties.Ward_Name)?.aqi;
     return { fillColor: aqiRampColor(v), color: aqiRampColor(v), weight: 0.6, opacity: 0.55, fillOpacity: 0.58 };
   };
 
   const cityNow = cityCurve[hourIdx] ?? cityCurve[0];
-  const timeLabel = hourIdx === 0 ? 'Now' : formatHourLabel(timeline.timestamps[hourIdx - 1]);
-  const hoverValue = hover ? wardValues.get(hover.name) : null;
-  const hoverStation = hover ? nearestStation(hover.centroid) : null;
+  const sample = source?.data_source === 'offline-sample';
+  const stale = source?.freshness?.status === 'stale';
+  const observedLabel = source?.observed_at ? new Date(source.observed_at).toLocaleString('en-IN', {
+    timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  }) + ' IST' : 'Time unavailable';
+  const timeLabel = hourIdx === 0 || !timeline ? observedLabel : formatHourLabel(timeline.timestamps[hourIdx - 1]);
+  const activeWard = pinnedWard || hover;
+  const estimate = activeWard ? wardValues.get(activeWard.name) : null;
+  const hoverValue = estimate?.aqi;
+  const hoverStation = activeWard ? nearestStation(activeWard.centroid) : null;
 
   const tiles = light
     ? { base: 'light_nolabels', labels: 'light_only_labels' }
@@ -207,17 +220,18 @@ export default function PredictionMap({
       >
         <TileLayer
           key={tiles.base}
-          url={`https://{s}.basemaps.cartocdn.com/${tiles.base}/{z}/{x}/{y}{r}.png`}
-          attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+          url={CARTO_KEY ? `https://{s}.basemaps.cartocdn.com/${tiles.base}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}` : "https://tile.openstreetmap.org/{z}/{x}/{y}.png"}
+          attribution={'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' + (CARTO_KEY ? ' &copy; CARTO' : '')}
         />
         {geo && (
           <GeoJSON ref={geoRef} data={geo} style={initialStyle} onEachFeature={onEachFeature} />
         )}
         <FitToCity geo={geo} />
         <ZoomWatcher onZoom={setZoom} />
-        <Pane name="labels" style={{ zIndex: 450, pointerEvents: 'none' }}>
-          <TileLayer key={tiles.labels} url={`https://{s}.basemaps.cartocdn.com/${tiles.labels}/{z}/{x}/{y}{r}.png`} />
-        </Pane>
+        <ZoomControl position="bottomright" />
+        {CARTO_KEY && <Pane name="labels" style={{ zIndex: 450, pointerEvents: 'none' }}>
+          <TileLayer key={tiles.labels} url={`https://{s}.basemaps.cartocdn.com/${tiles.labels}/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}`} />
+        </Pane>}
 
         {showVulnerable && vulnData.filter((v) => showVuln[v.type]).map((v, i) => (
           <CircleMarker
@@ -239,8 +253,10 @@ export default function PredictionMap({
         {stations.map((s) => (
           <Marker
             key={s.ward_id}
+            title={`${s.ward_name}: AQI estimate ${Math.round(s.value)}`}
+            alt={`${s.ward_name}: AQI estimate ${Math.round(s.value)}`}
             position={[s.lat, s.lon]}
-            icon={stationIcon(s.value, s.ward_id === selectedWardId, zoom < LABEL_MIN_ZOOM)}
+            icon={stationIcon(s.value, s.ward_id === selectedWardId, zoom < LABEL_MIN_ZOOM && s.ward_id !== selectedWardId)}
             eventHandlers={{ click: () => onWardClick && onWardClick(s) }}
           >
             <Tooltip direction="top" offset={[0, -10]}>
@@ -253,21 +269,22 @@ export default function PredictionMap({
 
       {/* Headline: city AQI at the selected hour */}
       <div className="pmap-panel pmap-headline">
-        <p className="pmap-eyebrow">{hourIdx === 0 ? 'Current air quality' : 'Predicted air quality'}</p>
+        <p className="pmap-eyebrow">{sample ? 'Historical sample' : stale ? 'Stale estimate' : hourIdx === 0 ? 'Air quality estimate' : 'Predicted air quality'}</p>
         <div className="pmap-headline-row">
           <span className="pmap-big" style={{ color: getAqiColor(cityNow) }}>{Math.round(cityNow ?? 0)}</span>
           <div>
             <span className="pmap-band" style={{ background: `${getAqiColor(cityNow)}22`, color: getAqiColor(cityNow) }}>
               {getAqiLabel(cityNow)}
             </span>
-            <p className="pmap-sub">Delhi average · {timeLabel}{hourIdx > 0 && ` · +${hourIdx}h`}</p>
+            <p className="pmap-sub">Station mean · {timeLabel}{hourIdx > 0 && ` · +${hourIdx}h`}</p>
           </div>
         </div>
       </div>
 
       {/* Legend + overlays */}
       <div className="pmap-panel pmap-legend">
-        <p className="pmap-eyebrow">AQI (NAQI)</p>
+        <p className="pmap-eyebrow">PM2.5 AQI estimate</p>
+        <p className="pmap-sub">Polygons: interpolated estimates. Dots: station locations.</p>
         <div className="pmap-ramp" />
         <div className="pmap-ramp-labels"><span>0</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
         {showVulnerable && (
@@ -288,14 +305,17 @@ export default function PredictionMap({
       </div>
 
       {/* Hovered ward */}
-      {hover && hoverValue != null && (
-        <div className="pmap-panel pmap-hover">
-          <p className="pmap-hover-name">{hover.name.toLowerCase()}</p>
+      {activeWard && (
+        <div className={`pmap-panel pmap-hover${pinnedWard ? ' pmap-pinned' : ''}`}>
+          <p className="pmap-hover-name">{activeWard.name.toLowerCase()}</p>
           <div className="pmap-headline-row">
-            <span className="pmap-mid" style={{ color: getAqiColor(hoverValue) }}>{Math.round(hoverValue)}</span>
+            <span className="pmap-mid" style={{ color: getAqiColor(hoverValue) }}>{hoverValue == null ? '—' : Math.round(hoverValue)}</span>
             <span className="pmap-sub">{getAqiLabel(hoverValue)}</span>
           </div>
-          {hoverStation && <p className="pmap-sub">Interpolated · nearest station {hoverStation.ward_name}</p>}
+          <p className="pmap-sub">{estimate?.count ? `${estimate.count} nearby inputs; nearest ${estimate.nearestKm.toFixed(1)} km. ${estimate.groundCount} ground-calibrated.` : 'No inputs within 20 km.'}</p>
+          <p className="pmap-sub">{sample ? 'Historical sample, not current.' : 'Spatial uncertainty has not been validated.'}</p>
+          {hoverStation && <button onClick={() => onWardClick?.(hoverStation)}>View nearby station: {hoverStation.ward_name}</button>}
+          {pinnedWard && <button aria-label="Close ward estimate" onClick={() => setPinnedWard(null)}>Close</button>}
         </div>
       )}
 
@@ -324,7 +344,7 @@ export default function PredictionMap({
               aria-label="Forecast hour"
             />
             <div className="pmap-ticks">
-              <span>Now</span><span>+24h</span><span>+48h</span><span>+72h</span>
+              <span>Base time</span><span>+24h</span><span>+48h</span><span>+72h</span>
             </div>
           </div>
         </div>

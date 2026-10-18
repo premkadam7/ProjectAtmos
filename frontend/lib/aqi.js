@@ -98,7 +98,7 @@ export function loadWardGeometry() {
 
 export function formatHourLabel(iso) {
   const d = new Date(iso);
-  return d.toLocaleString('en-IN', { weekday: 'short', hour: 'numeric', hour12: true });
+  return d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', hour12: true });
 }
 
 export const SOURCE_INFO = {

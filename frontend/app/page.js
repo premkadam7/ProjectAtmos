@@ -61,7 +61,7 @@ function Skeleton({ height = 200, style = {} }) {
 }
 
 function formatTime(iso, opts = { hour: 'numeric', minute: '2-digit', hour12: true }) {
-  return new Date(iso).toLocaleString('en-IN', opts);
+  return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', ...opts });
 }
 
 function formatAge(minutes) {
@@ -75,12 +75,12 @@ function DataSourceBadge({ data }) {
   if (!data?.data_source) return null;
   const stale = data.freshness?.status === 'stale';
   const info = stale ? SOURCE_INFO.stale : (SOURCE_INFO[data.data_source] || SOURCE_INFO['offline-sample']);
-  const observed = formatTime(data.observed_at, { day: '2-digit', month: 'short', hour: 'numeric', hour12: true });
+  const observed = formatTime(data.freshness?.data_timestamp ?? data.observed_at, { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
   return (
     <div className="source-badge" title={data.source_detail} style={{ '--c': info.tone }}>
       <span className="source-dot" />
       <span className="source-label">{info.label}</span>
-      <span className="source-meta">{data.source_detail} · observed {observed}</span>
+      <span className="source-meta">{data.source_detail} · inputs as of {observed} IST</span>
     </div>
   );
 }
@@ -110,7 +110,7 @@ function LiveAqiCard({ aqi, pm25, pm10, observedAt, animOrder = 0 }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
           <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px #fff' }} />
           <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>
-            Delhi average · {observedAt ? formatTime(observedAt) : 'now'}
+            Station mean · {observedAt ? formatTime(observedAt, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' IST' : 'Time unavailable'}
           </span>
         </div>
 
@@ -243,7 +243,7 @@ function ForecastCard({ ward, detail, error, onRetry, animOrder = 0 }) {
           <circle cx={x(0)} cy={y(points[0].aqi)} r="4.5" fill={getAqiColor(points[0].aqi)} stroke="#fff" strokeWidth="2" />
           {ticks.map((t) => (
             <text key={t} x={x(t)} y={H - 8} fontSize="10" textAnchor={t === 0 ? 'start' : t === 72 ? 'end' : 'middle'} fill="var(--text-dim)">
-              {t === 0 ? 'Now' : `+${t}h`}
+              {t === 0 ? 'Base'  : `+${t}h`}
             </text>
           ))}
           {hp && (
@@ -256,7 +256,7 @@ function ForecastCard({ ward, detail, error, onRetry, animOrder = 0 }) {
         {hp && (
           <div className="chart-tip" style={{ left: `${(x(h) / W) * 100}%` }}>
             <strong style={{ color: getAqiColor(hp.aqi) }}>{Math.round(hp.aqi)}</strong> {getAqiLabel(hp.aqi)}
-            <span>{h === 0 ? 'Now' : formatTime(hp.timestamp, { weekday: 'short', hour: 'numeric', hour12: true })}</span>
+            <span>{h === 0 ? 'Base time' : formatTime(hp.timestamp, { weekday: 'short', hour: 'numeric', hour12: true })}</span>
             {h > 0 && <span>range {Math.round(hp.aqi_low)}–{Math.round(hp.aqi_high)}</span>}
           </div>
         )}
@@ -273,7 +273,7 @@ function ForecastCard({ ward, detail, error, onRetry, animOrder = 0 }) {
         </div>
         <div>
           <p className="forecast-stat-value" style={{ color: getAqiColor(forecast[23].aqi) }}>{Math.round(forecast[23].aqi)}</p>
-          <p className="forecast-stat-label">Tomorrow, same time</p>
+          <p className="forecast-stat-label">24h after base time</p>
         </div>
       </div>
     </Card>
@@ -356,7 +356,7 @@ function CigaretteCard({ cigarettes, pm25, animOrder = 0 }) {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
             <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#fff', boxShadow: '0 0 6px #fff' }} />
-            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>Today you had</span>
+            <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', fontWeight: '500' }}>Equivalent exposure over 24h</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: '10px' }}>
             <span style={{ fontSize: '72px', fontWeight: '800', color: '#fff', lineHeight: 1, letterSpacing: '-2px' }}>
@@ -384,7 +384,7 @@ function CigaretteCard({ cigarettes, pm25, animOrder = 0 }) {
           }} />
         </div>
         <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.65)', marginTop: '12px' }}>
-          At this rate: <strong style={{ color: '#fff' }}>~{weekly} cigarettes</strong> this week · based on PM2.5 = {pm25} µg/m³
+          At this rate: <strong style={{ color: '#fff' }}>~{weekly} cigarettes</strong> over seven days at this level · based on PM2.5 = {pm25} µg/m³
         </p>
       </div>
     </Card>
@@ -502,7 +502,7 @@ function HistoricalCard({ history, error, onRetry, animOrder = 0 }) {
   const axisLabel = (d) => (dayLabels
     ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
     : d.toLocaleString('en-IN', { hour: 'numeric', hour12: true, ...(bucket > 1 ? { day: '2-digit', month: 'short' } : {}) }));
-  const fullLabel = (d) => d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: 'numeric', hour12: true });
+  const fullLabel = (d) => d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', hour12: true });
 
   return (
     <Card
@@ -626,6 +626,13 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
 
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden) setAttempt(n => n + 1); };
+    const timer = setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, []);
+
   // Fire all requests at once; each card renders as soon as its data lands.
   // Hosted backends can take a while to wake, so retry a few times on failure.
   useEffect(() => {
@@ -696,7 +703,7 @@ export default function Home() {
             Delhi AQI forecast
           </h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Ward-level predictions for the next 72 hours. Press play or drag the timeline to watch them unfold.
+            Station forecasts and interpolated ward estimates, up to 72 hours from the data timestamp. Press play or drag the timeline to watch them unfold.
           </p>
         </div>
         <DataSourceBadge data={data} />
@@ -705,10 +712,12 @@ export default function Home() {
       {data?.freshness?.status === 'stale' && (
         <div className="notice">
           Live updates are failing, so this data is {formatAge(data.freshness.data_age_minutes)} old
-          (observed {formatTime(data.observed_at, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}).
+          (inputs as of {formatTime(data.freshness.data_timestamp ?? data.observed_at, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })} IST).
           Current conditions may differ.
         </div>
       )}
+
+      {error && data && <div className="notice">The latest refresh failed. Showing the last loaded data; check its timestamp.</div>}
 
       {data?.data_source === 'offline-sample' && (
         <div className="notice">
@@ -717,9 +726,15 @@ export default function Home() {
         </div>
       )}
 
+      {data?.data_source === 'model-only' && <div className="notice">
+        No ground calibration is available. These are coarse regional model estimates;
+        nearby wards may share the same inputs. Ward-level accuracy has not been validated.
+      </div>}
+
       {/* Spatial hero */}
       {data ? (
         <PredictionMap
+          source={data}
           wards={wards}
           timeline={timeline}
           selectedWardId={selectedWard?.ward_id}
@@ -751,7 +766,7 @@ export default function Home() {
       <HistoricalCard history={history} error={historyError} onRetry={() => setHistoryReload((n) => n + 1)} animOrder={4} />
 
       {/* Ward rankings */}
-      <Card title="All wards — now and in 24h" className="stagger-in" style={{ animationDelay: '0.4s' }}>
+      <Card title="Station locations — base time and +24h" className="stagger-in" style={{ animationDelay: '0.4s' }}>
         {!data ? <Skeleton height={120} /> : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
             {worst.map((ward) => {

@@ -57,6 +57,9 @@ def get_data_source():
         "observed_at": snap["observed_at"],
         "generated_at": snap["generated_at"],
         "ground_stations": snap["ground_stations"],
+        "spatial_method": "Station-location forecasts; ward polygons use distance-weighted PM2.5 estimates",
+        "spatial_uncertainty": "Not validated against withheld monitoring stations",
+        "aqi_basis": "PM2.5-derived estimate, not official multi-pollutant AQI",
         "freshness": freshness(snap),
     }
 

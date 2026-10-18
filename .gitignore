@@ -19,3 +19,5 @@ out/
 
 # Runtime cache written by the live data pipeline
 backend/data_store/cache/live_snapshot.pkl
+
+backend/data_store/cache/runtime/
