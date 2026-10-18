@@ -1,4 +1,5 @@
 import math
+import threading
 
 import pandas as pd
 
@@ -11,19 +12,40 @@ def _pm25_to_aqi(pm25):
     return calculate_aqi_from_pm25(pm25)
 
 
+class UnknownWardError(LookupError):
+    """A ward_id that no monitored station belongs to (served as HTTP 404)."""
+
+    def __init__(self, ward_id):
+        super().__init__(ward_id)
+        self.ward_id = ward_id
+
+
+class UnsupportedInterventionError(ValueError):
+    """An intervention the what-if model has no counterfactual for (HTTP 422)."""
+
+
+# Features zeroed for each intervention's counterfactual (sensitivity analysis)
+INTERVENTION_FEATURES = {
+    "pause_construction": ["pm10"],
+    "restrict_traffic": ["no2", "co"],
+    "industrial_shutdown": ["so2"],
+}
+INTERVENTION_ALIASES = {"pause factory industrial emissions": "industrial_shutdown"}
+
+
 def _find_ward(snap, ward_id):
     for w in snap["wards"]:
         if w["ward_id"] == ward_id:
             return w
-    return snap["wards"][0] if snap["wards"] else None
+    raise UnknownWardError(ward_id)
 
 
 def _latest_row(ward_id):
-    """Latest model feature row for a ward (first station if the ward is unknown)."""
+    """Latest model feature row for a ward."""
     latest = get_snapshot()["latest_features"]
     ward_row = latest[latest["ward_id"] == ward_id]
     if ward_row.empty:
-        ward_row = latest.iloc[[0]]
+        raise UnknownWardError(ward_id)
     return ward_row.iloc[0]
 
 
@@ -57,8 +79,6 @@ def get_city_hourly():
 
 def get_ward_forecast(ward_id: str, hours: int = 72):
     w = _find_ward(get_snapshot(), ward_id)
-    if w is None:
-        return None
     return {
         "ward_id": w["ward_id"],
         "ward_name": w["ward_name"],
@@ -82,7 +102,7 @@ def get_history(ward_id: str = None, hours: int = 24 * 30):
     if ward_id:
         hist = hist[hist["ward_id"] == ward_id]
         if hist.empty:
-            return []
+            raise UnknownWardError(ward_id)
     cols = [*POLLUTANTS, "aqi"]
     series = hist.groupby("timestamp")[cols].mean().sort_index()
     series = series[series.index > series.index.max() - pd.Timedelta(hours=hours)]
@@ -93,6 +113,7 @@ def get_history(ward_id: str = None, hours: int = 24 * 30):
 
 
 _shap_explainer = None
+_shap_lock = threading.Lock()
 
 
 def _model_resources():
@@ -107,7 +128,9 @@ def get_ward_blame(ward_id: str):
 
     models, feature_names = _model_resources()
     if _shap_explainer is None:
-        _shap_explainer = shap.TreeExplainer(models['q50'])
+        with _shap_lock:
+            if _shap_explainer is None:
+                _shap_explainer = shap.TreeExplainer(models['q50'])
 
     row = _latest_row(ward_id)
     X = row[feature_names].values.astype(float).reshape(1, -1)
@@ -177,6 +200,11 @@ def get_ward_blame(ward_id: str):
 
 
 def run_whatif_simulation(ward_id: str, intervention: str, duration_hours: int = 48) -> dict:
+    key = INTERVENTION_ALIASES.get(intervention, intervention)
+    if key not in INTERVENTION_FEATURES:
+        raise UnsupportedInterventionError(
+            f"Unsupported intervention '{intervention}'. Supported: {', '.join(INTERVENTION_FEATURES)}"
+        )
     models, feature_names = _model_resources()
     row = _latest_row(ward_id)
     ward_name = row.get("station", ward_id)
@@ -190,13 +218,8 @@ def run_whatif_simulation(ward_id: str, intervention: str, duration_hours: int =
 
     # 3. Production mode (genuine ML counterfactual)
     modified_row = row.copy()
-    if intervention == "pause_construction":
-        modified_row["pm10"] = 0.0
-    elif intervention == "restrict_traffic":
-        modified_row["no2"] = 0.0
-        modified_row["co"] = 0.0
-    elif intervention in ("industrial_shutdown", "pause factory industrial emissions"):
-        modified_row["so2"] = 0.0
+    for feature in INTERVENTION_FEATURES[key]:
+        modified_row[feature] = 0.0
 
     X_mod = modified_row[feature_names].values.astype(float).reshape(1, -1)
     counterfactual_pm25 = model_predict(models['q50'], X_mod)[0] * ratio

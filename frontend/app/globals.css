@@ -1814,3 +1814,10 @@ h4, .h4 { font-size: 16px; font-weight: 600; line-height: 1.5; }
   margin-top: 6px; padding: 8px 18px; border-radius: 999px; border: none; cursor: pointer;
   font-weight: 600; color: #fff; background: var(--accent-gradient);
 }
+.load-error-inline {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 16px; border-radius: 12px; font-size: 13px; color: var(--text-secondary);
+  background: rgba(239, 68, 68, 0.06); border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.load-error-inline .api-error-retry { margin-top: 2px; padding: 6px 14px; font-size: 12px; }
+.load-error-title { font-weight: 600; color: #ef4444; }

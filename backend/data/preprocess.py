@@ -83,6 +83,29 @@ def add_model_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def merge_ndvi(df: pd.DataFrame, path: str = None) -> pd.DataFrame:
+    """Add ndvi_mean per ward_id from the shared NDVI table (see data/ndvi_table.py)."""
+    try:
+        from data.ndvi_table import NDVI_PATH, ambiguous_ward_names, load_ndvi_table
+    except ImportError:   # run as a script from backend/
+        sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+        from data.ndvi_table import NDVI_PATH, ambiguous_ward_names, load_ndvi_table
+    path = path or NDVI_PATH
+    if not os.path.exists(path):
+        return df
+    logger.info("Merging NDVI data")
+    df_ndvi = load_ndvi_table(path)   # raises on a schema mismatch instead of silently skipping
+    ambiguous = ambiguous_ward_names(df_ndvi)
+    if ambiguous:
+        # A name shared by several wards would duplicate rows in the join
+        logger.warning(f"Skipping NDVI for ambiguous ward names: {ambiguous}")
+        df_ndvi = df_ndvi[~df_ndvi["Ward_Name"].isin(ambiguous)]
+    df_ndvi = df_ndvi.assign(ward_id=df_ndvi["Ward_Name"].apply(_normalize_ward_name)).drop(columns=["Ward_Name"])
+    df = pd.merge(df, df_ndvi, on="ward_id", how="left")
+    df["ndvi_mean"] = df["ndvi_mean"].fillna(0.0)
+    return df
+
+
 def engineer_features():
     cache_dir = os.path.join("data_store", "cache")
     aqi_path = os.path.join(cache_dir, "aqi_delhi.csv")
@@ -142,15 +165,7 @@ def engineer_features():
     except Exception as e:
         logger.warning(f"Spatial join failed: {e}")
 
-    ndvi_path = os.path.join(cache_dir, "delhi_wards_ndvi.csv")
-    if os.path.exists(ndvi_path):
-        logger.info("Merging NDVI data")
-        df_ndvi = pd.read_csv(ndvi_path)
-        df_ndvi["ward_id"] = df_ndvi["Ward_Name"].apply(_normalize_ward_name)
-        df_ndvi = df_ndvi.drop(columns=["Ward_Name"], errors='ignore')
-        df = pd.merge(df, df_ndvi, on="ward_id", how="left")
-        if "ndvi_mean" in df.columns:
-            df["ndvi_mean"] = df["ndvi_mean"].fillna(0.0)
+    df = merge_ndvi(df)
 
     pop_path = os.path.join(cache_dir, "delhi_wards_population.csv")
     if os.path.exists(pop_path):

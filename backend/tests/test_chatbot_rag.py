@@ -105,3 +105,51 @@ def test_provider_failure_falls_back_to_snapshot_data(client, monkeypatch):
     text = "".join(e.get("text", "") for e in events)
     assert "Rohini: current AQI" in text
     assert events[-1]["done"] is True and "error" not in events[-1]
+
+
+# ── Language reaches the real prompt (F20) ───────────────────────────────────
+
+@pytest.fixture
+def captured_prompts(monkeypatch):
+    """Replace Gemini with a stub that records the assembled prompt."""
+    from langchain_core.runnables import RunnableLambda
+    from langchain_core.messages import AIMessage
+    import services.chatbot as chatbot
+
+    prompts = []
+
+    def stub_llm(**kwargs):
+        def respond(prompt_value):
+            prompts.append(prompt_value.to_messages())
+            return AIMessage(content="stub reply")
+        return RunnableLambda(respond)
+
+    monkeypatch.setattr(chatbot, "ChatGoogleGenerativeAI", stub_llm)
+    monkeypatch.setattr(AtmosChatbotService, "should_use_mock", classmethod(lambda cls, force_rag=False: False))
+    return prompts
+
+
+def _system_text(messages):
+    return next(m.content for m in messages if m.type == "system")
+
+
+def test_hindi_selection_with_english_query_requests_hindi(client, captured_prompts):
+    data = client.post("/api/chat", json={"message": "How is the air in Rohini?", "language": "hi"}).json()
+    assert data["response"] == "stub reply"
+    assert data["language"] == "hi"
+    assert "Respond in Hindi (हिंदी)" in _system_text(captured_prompts[-1])
+
+    # Same instruction on the streaming path
+    with client.stream("POST", "/api/chat", json={"message": "How is the air in Rohini?", "language": "hi"},
+                       headers={"Accept": "text/event-stream"}) as resp:
+        list(resp.iter_lines())
+    assert "Respond in Hindi (हिंदी)" in _system_text(captured_prompts[-1])
+
+
+def test_english_and_unsupported_languages_request_english(client, captured_prompts):
+    for lang in ("en", "fr", ""):
+        data = client.post("/api/chat", json={"message": "AQI?", "language": lang}).json()
+        assert data["language"] == "en"
+        system = _system_text(captured_prompts[-1])
+        assert "Respond in English" in system
+        assert "{language_instruction}" not in system

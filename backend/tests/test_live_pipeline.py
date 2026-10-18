@@ -204,3 +204,42 @@ def test_history_is_labelled_modelled(client):
     data = client.get("/api/history/delhi?hours=24").json()
     assert data["series_kind"] == "modelled"
     assert "not station measurements" in data["series_description"]
+
+
+# ── Concurrent initialization (F19) ──────────────────────────────────────────
+
+def test_concurrent_resource_load_is_atomic(monkeypatch):
+    import threading, time
+    real_load = lp.joblib.load
+    calls = []
+
+    def slow_load(path):
+        calls.append(path)
+        time.sleep(0.05)   # widen the window a partial bundle used to be visible in
+        return real_load(path)
+
+    monkeypatch.setattr(lp.joblib, "load", slow_load)
+    monkeypatch.setattr(lp, "_resources", None)
+
+    start = threading.Barrier(8)
+    seen, errors = [], []
+
+    def worker():
+        start.wait()
+        try:
+            res = lp._load_resources()
+            seen.append(res)
+            assert {"models", "feature_names", "sample", "stations"} <= set(res)
+            res["feature_names"]   # used to raise KeyError mid-initialisation
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker) for _ in range(8)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors
+    assert all(r is seen[0] for r in seen)   # one shared bundle
+    assert len(calls) == 4                   # 3 models + feature names, loaded once

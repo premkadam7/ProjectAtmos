@@ -79,11 +79,10 @@ def test_vulnerable_delhi_success(client):
     assert len(parsed.locations) == parsed.total_locations
 
 def test_vulnerable_other_city(client):
+    # Unsupported cities are rejected rather than answered with Delhi's data
     response = client.get("/api/vulnerable/mumbai")
-    assert response.status_code == 200
-    data = response.json()
-    parsed = VulnerableResponse(**data)
-    assert parsed.city == "mumbai"
+    assert response.status_code == 404
+    assert "Unsupported city" in response.json()["detail"]
 
 def test_vulnerable_location_types(client):
     response = client.get("/api/vulnerable/delhi")
@@ -116,7 +115,7 @@ def test_whatif_traffic_intervention(client):
     overview_resp = client.get("/api/forecast/delhi")
     assert overview_resp.status_code == 200
     wards = overview_resp.json().get("wards", [])
-    ward_id = wards[0]["ward_id"] if wards else "rohini_sector_7"
+    ward_id = wards[0]["ward_id"] if wards else "rohini"
 
     payload = {
         "ward_id": ward_id,
@@ -135,7 +134,7 @@ def test_whatif_traffic_intervention(client):
 def test_whatif_construction_intervention(client):
     overview_resp = client.get("/api/forecast/delhi")
     wards = overview_resp.json().get("wards", [])
-    ward_id = wards[0]["ward_id"] if wards else "rohini_sector_7"
+    ward_id = wards[0]["ward_id"] if wards else "rohini"
 
     payload = {
         "ward_id": ward_id,
@@ -152,7 +151,7 @@ def test_whatif_construction_intervention(client):
 def test_whatif_factory_intervention(client):
     overview_resp = client.get("/api/forecast/delhi")
     wards = overview_resp.json().get("wards", [])
-    ward_id = wards[0]["ward_id"] if wards else "rohini_sector_7"
+    ward_id = wards[0]["ward_id"] if wards else "rohini"
 
     payload = {
         "ward_id": ward_id,
@@ -166,29 +165,26 @@ def test_whatif_factory_intervention(client):
     assert parsed.reduction_percentage >= 0.0
 
 def test_whatif_other_intervention(client):
+    # Interventions without a modelled counterfactual are rejected
     payload = {
-        "ward_id": "rohini_sector_7",
+        "ward_id": "rohini",
         "intervention": "some random intervention",
-        "duration_hours": 12
+        "duration_hours": 24
     }
     response = client.post("/api/whatif", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    parsed = WhatIfResponse(**data)
-    assert parsed.reduction_percentage >= 0.0
+    assert response.status_code == 422
+    assert "Unsupported intervention" in response.json()["detail"]
 
-def test_whatif_invalid_ward_fallback(client):
+def test_whatif_unknown_ward_is_404(client):
+    # An unknown ward must not be answered with another station's values
     payload = {
         "ward_id": "non_existent_ward_123",
         "intervention": "pause_construction",
         "duration_hours": 48
     }
     response = client.post("/api/whatif", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    parsed = WhatIfResponse(**data)
-    assert parsed.ward_id == "non_existent_ward_123"
-    assert parsed.current_forecast > 0
+    assert response.status_code == 404
+    assert "non_existent_ward_123" in response.json()["detail"]
 
 
 # ── FEATURE 4: Demo Pre-computation Endpoints ──

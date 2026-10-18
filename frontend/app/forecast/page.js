@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { getForecast, getWardDetail, getBlame, getTimeline } from '@/lib/api';
 import Card from '@/components/common/Card';
+import LoadError from '@/components/common/LoadError';
 import { getAqiColor, getAqiLabel } from '@/lib/aqi';
 import dynamic from 'next/dynamic';
 
@@ -36,7 +37,7 @@ const BLAME_COLORS = {
 };
 
 /* ---------- Ward Detail Panel ---------- */
-function WardDetailPanel({ ward, detail, blame, onClose }) {
+function WardDetailPanel({ ward, detail, blame, detailError, blameError, onRetry, onClose }) {
   if (!ward) return null;
 
   const color = getAqiColor(ward.current_aqi);
@@ -125,6 +126,17 @@ function WardDetailPanel({ ward, detail, blame, onClose }) {
           ))}
         </div>
       </div>
+
+      {(detailError || blameError) && (
+        <div style={{ padding: '16px 20px' }}>
+          <LoadError
+            compact
+            title={detailError ? "Couldn't load this ward's forecast" : "Couldn't load pollution attribution"}
+            error={detailError || blameError}
+            onRetry={onRetry}
+          />
+        </div>
+      )}
 
       {/* Hourly forecast chart */}
       {hourly.length > 0 && (
@@ -218,25 +230,35 @@ function WardDetailPanel({ ward, detail, blame, onClose }) {
 export default function ForecastPage() {
   const [forecastData, setForecastData] = useState(null);
   const [selectedWard, setSelectedWard] = useState(null);
-  const [detailState, setDetailState]   = useState({ wardId: null, data: null });
-  const [blameState, setBlameState]     = useState({ wardId: null, data: null });
+  const [forecastError, setForecastError] = useState(null);
+  const [detailState, setDetailState]   = useState({ wardId: null, data: null, error: null });
+  const [blameState, setBlameState]     = useState({ wardId: null, data: null, error: null });
   const [search, setSearch]             = useState('');
   const [timeline, setTimeline]         = useState(null);
+  const [reload, setReload]             = useState(0);
+  const [detailReload, setDetailReload] = useState(0);
 
   useEffect(() => {
-    getForecast('delhi').then(setForecastData);
-    getTimeline('delhi').then(setTimeline).catch(() => {});
-  }, []);
+    getForecast('delhi')
+      .then((d) => { setForecastError(null); setForecastData(d); })
+      .catch(setForecastError);
+    getTimeline('delhi').then(setTimeline).catch(() => {});   // map still works without the timeline
+  }, [reload]);
 
   useEffect(() => {
     if (!selectedWard) return;
     const wardId = selectedWard.ward_id;
-    getWardDetail('delhi', wardId).then((data) => setDetailState({ wardId, data }));
-    getBlame('delhi', wardId).then((data) => setBlameState({ wardId, data }));
-  }, [selectedWard]);
+    getWardDetail('delhi', wardId)
+      .then((data) => setDetailState({ wardId, data, error: null }))
+      .catch((error) => setDetailState({ wardId, data: null, error }));
+    getBlame('delhi', wardId)
+      .then((data) => setBlameState({ wardId, data, error: null }))
+      .catch((error) => setBlameState({ wardId, data: null, error }));
+  }, [selectedWard, detailReload]);
 
-  const wardDetail = detailState.wardId === selectedWard?.ward_id ? detailState.data : null;
-  const blame      = blameState.wardId === selectedWard?.ward_id ? blameState.data : null;
+  const current = (state) => (state.wardId === selectedWard?.ward_id ? state : { data: null, error: null });
+  const wardDetail = current(detailState).data;
+  const blame      = current(blameState).data;
 
   const wards = forecastData?.wards || [];
 
@@ -247,6 +269,10 @@ export default function ForecastPage() {
   function handleWardClick(ward) {
     setSelectedWard(ward);
     setSearch('');
+  }
+
+  if (forecastError && !forecastData) {
+    return <LoadError title="Couldn't load the forecast" error={forecastError} onRetry={() => setReload((n) => n + 1)} />;
   }
 
   return (
@@ -365,6 +391,9 @@ export default function ForecastPage() {
           ward={selectedWard}
           detail={wardDetail}
           blame={blame}
+          detailError={current(detailState).error}
+          blameError={current(blameState).error}
+          onRetry={() => setDetailReload((n) => n + 1)}
           onClose={() => setSelectedWard(null)}
         />
       )}

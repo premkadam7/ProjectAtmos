@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from routers.validation import supported_city
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
@@ -16,7 +17,7 @@ RECOMMENDATIONS = {
 
 @router.get("/{city}")
 def get_enforcement_tickets(
-    city: str,
+    city: str = Depends(supported_city),
     source: Optional[str] = Query(None, description="Filter by primary cause")
 ):
     overview = get_city_overview()

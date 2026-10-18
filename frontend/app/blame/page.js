@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getForecast, getBlame } from '@/lib/api';
 import { getAqiColor } from '@/lib/aqi';
+import LoadError from '@/components/common/LoadError';
 
 const blameColors = {
   'Traffic & Time': '#3b82f6',
@@ -16,25 +17,37 @@ export default function BlamePage() {
   const [allWards, setAllWards] = useState([]);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
-  const [blameState, setBlameState] = useState({ wardId: null, data: null });
-  const blameData = blameState.wardId === selected?.ward_id ? blameState.data : null;
+  const [blameState, setBlameState] = useState({ wardId: null, data: null, error: null });
+  const [wardsError, setWardsError] = useState(null);
+  const [reload, setReload] = useState(0);
+  const [blameReload, setBlameReload] = useState(0);
+  const current = blameState.wardId === selected?.ward_id ? blameState : { data: null, error: null };
+  const blameData = current.data;
 
   useEffect(() => {
-    getForecast('delhi').then((data) => {
-      const wards = Array.isArray(data) ? data : (data?.wards || []);
-      const sorted = [...wards].sort((a, b) => b.current_aqi - a.current_aqi);
-      setAllWards(sorted);
-      if (sorted.length > 0) {
-        setSelected(sorted[0]);
-      }
-    });
-  }, []);
+    getForecast('delhi')
+      .then((data) => {
+        const sorted = [...(data?.wards || [])].sort((a, b) => b.current_aqi - a.current_aqi);
+        setWardsError(null);
+        setAllWards(sorted);
+        if (sorted.length > 0) {
+          setSelected((prev) => prev ?? sorted[0]);
+        }
+      })
+      .catch(setWardsError);
+  }, [reload]);
 
   useEffect(() => {
     if (!selected) return;
     const wardId = selected.ward_id;
-    getBlame('delhi', wardId).then((data) => setBlameState({ wardId, data }));
-  }, [selected]);
+    getBlame('delhi', wardId)
+      .then((data) => setBlameState({ wardId, data, error: null }))
+      .catch((error) => setBlameState({ wardId, data: null, error }));
+  }, [selected, blameReload]);
+
+  if (wardsError && allWards.length === 0) {
+    return <LoadError title="Couldn't load ward data" error={wardsError} onRetry={() => setReload((n) => n + 1)} />;
+  }
 
   const searchResults = search.length > 0
     ? allWards.filter(w => w.ward_name.toLowerCase().includes(search.toLowerCase()))
@@ -113,7 +126,7 @@ export default function BlamePage() {
         {/* Blame breakdown */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
-          {selected && blameData && !blameData.error ? (
+          {selected && blameData?.factors?.length ? (
             <>
               <div className="card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -212,6 +225,13 @@ export default function BlamePage() {
                 </div>
               </div>
             </>
+          ) : current.error ? (
+            <LoadError
+              compact
+              title={`Couldn't load attribution for ${selected?.ward_name ?? 'this ward'}`}
+              error={current.error}
+              onRetry={() => setBlameReload((n) => n + 1)}
+            />
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-dim)' }}>
               Loading data...

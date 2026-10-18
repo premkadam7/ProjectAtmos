@@ -3,7 +3,8 @@ import os
 import geopandas as gpd
 from shapely.geometry import Point
 
-CACHE_DIR = os.path.join("data_store", "geojson")
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CACHE_DIR = os.path.join(BACKEND_DIR, "data_store", "geojson")
 GEOJSON_PATH = os.path.join(CACHE_DIR, "delhi_wards.geojson")
 
 _gdf = None
