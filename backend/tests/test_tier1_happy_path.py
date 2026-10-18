@@ -12,54 +12,59 @@ from models.schemas import (
 
 # ── FEATURE 1: Chat Assistant Endpoints ──
 
+def _city(client):
+    return client.get("/api/forecast/delhi").json()
+
+
 def test_chat_default_english(client):
     response = client.post("/api/chat", json={"message": "What is Delhi's average AQI?", "language": "en"})
     assert response.status_code == 200
-    data = response.json()
-    parsed = ChatResponse(**data)
+    parsed = ChatResponse(**response.json())
     assert parsed.language == "en"
     assert parsed.conversation_id is not None
-    assert "Delhi's average AQI is 215" in parsed.response
-    assert "Forecast Data" in parsed.sources
+    # Grounded in the snapshot, with its provenance, not a canned figure
+    avg = round(_city(client)["city_avg_aqi"])
+    assert f"Delhi's average AQI is {avg}" in parsed.response
+    assert "not current conditions" in parsed.response
+    assert any("Atmos forecast snapshot" in s for s in parsed.sources)
 
 def test_chat_rohini_query(client):
     response = client.post("/api/chat", json={"message": "Tell me about Rohini", "language": "en"})
     assert response.status_code == 200
-    data = response.json()
-    parsed = ChatResponse(**data)
-    assert "Rohini" in parsed.response
-    assert "245" in parsed.response
+    parsed = ChatResponse(**response.json())
+    rohini = next(w for w in _city(client)["wards"] if w["ward_name"] == "Rohini")
+    assert f"Rohini: current AQI {rohini['current_aqi']:.0f}" in parsed.response
 
 def test_chat_dwarka_query(client):
     response = client.post("/api/chat", json={"message": "How is Dwarka's air quality?", "language": "en"})
     assert response.status_code == 200
-    data = response.json()
-    parsed = ChatResponse(**data)
+    parsed = ChatResponse(**response.json())
     assert "Dwarka" in parsed.response
-    assert "185" in parsed.response
+    assert "current AQI" in parsed.response
 
 def test_chat_jogging_query(client):
     response = client.post("/api/chat", json={"message": "Can I go jogging tomorrow?", "language": "en"})
     assert response.status_code == 200
-    data = response.json()
-    parsed = ChatResponse(**data)
-    assert "jogging" in parsed.response or "exercise" in parsed.response or "Vasant Kunj" in parsed.response
+    parsed = ChatResponse(**response.json())
+    assert "lowest predicted city-average AQI" in parsed.response
+    assert "not a guarantee" in parsed.response
+    assert "Vasant Kunj" not in parsed.response   # not a monitored station
 
 def test_chat_hindi_default(client):
     response = client.post("/api/chat", json={"message": "दिल्ली का AQI क्या है?", "language": "hi"})
     assert response.status_code == 200
-    data = response.json()
-    parsed = ChatResponse(**data)
+    parsed = ChatResponse(**response.json())
     assert parsed.language == "hi"
-    assert "दिल्ली का औसत AQI 215" in parsed.response
+    avg = round(_city(client)["city_avg_aqi"])
+    assert f"दिल्ली का औसत AQI {avg}" in parsed.response
 
 def test_chat_hindi_rohini(client):
     response = client.post("/api/chat", json={"message": "रोहिणी सेक्टर 7 की स्थिति क्या है?", "language": "hi"})
     assert response.status_code == 200
-    data = response.json()
-    parsed = ChatResponse(**data)
+    parsed = ChatResponse(**response.json())
     assert parsed.language == "hi"
-    assert "रोहिणी सेक्टर 7" in parsed.response or "245" in parsed.response
+    assert "AQI" in parsed.response
+    assert "245" not in parsed.response   # the old invented reading
 
 
 # ── FEATURE 2: Vulnerable Locations Endpoints ──
