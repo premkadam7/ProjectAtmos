@@ -7,14 +7,14 @@ from services.places import is_verified
 
 router = APIRouter(prefix="/api/vulnerable", tags=["vulnerable"])
 
-GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data_store", "geojson", "vulnerable_locations.geojson")
+GEOJSON_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data_store", "geojson", "vulnerable_locations.geojson"))
 
 @router.get("/{city}", response_model=VulnerableResponse)
 def get_vulnerable_locations(city: str = Depends(supported_city)):
     if not os.path.exists(GEOJSON_PATH):
         try:
             from data.fetch_vulnerable import main as fetch_main
-            fetch_main()
+            fetch_main(GEOJSON_PATH)
         except Exception as e:
             raise HTTPException(
                 status_code=500,

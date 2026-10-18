@@ -11,12 +11,9 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-# Set working directory to backend/ so relative imports and relative paths in other files function correctly
-os.chdir(backend_dir)
-
 from data.boundaries import get_ward_by_coords, get_wards_gdf
 
-output_path = os.path.join("data_store", "geojson", "vulnerable_locations.geojson")
+output_path = os.path.join(backend_dir, "data_store", "geojson", "vulnerable_locations.geojson")
 
 def _resolve_col(gdf, candidates):
     for c in candidates:
@@ -157,7 +154,9 @@ def _has_verified_records(path):
     )
 
 
-def main():
+def main(path=None):
+    """Fetch facilities and write them to `path` (default: the bundled data file)."""
+    path = path or output_path
     fetched_at = datetime.now(timezone.utc).isoformat()
     data = fetch_from_overpass()
     
@@ -230,7 +229,7 @@ def main():
             })
 
     if not locations:
-        if _has_verified_records(output_path):
+        if _has_verified_records(path):
             print("Overpass fetch failed; keeping the existing verified OpenStreetMap data unchanged.")
             return
         print("No locations fetched. Writing SYNTHETIC placeholder locations (not real facilities)...")
@@ -256,10 +255,10 @@ def main():
     }
     
     # Save cache file
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(geojson, f, indent=2)
-    print(f"Successfully saved {len(locations)} locations to {output_path}")
+    print(f"Successfully saved {len(locations)} locations to {path}")
 
 if __name__ == "__main__":
     main()

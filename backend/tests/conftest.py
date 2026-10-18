@@ -15,61 +15,35 @@ from fastapi.testclient import TestClient
 
 # Import the app
 from main import app
-from models.schemas import VulnerableResponse, VulnerableLocation, WhatIfRequest, WhatIfResponse
 
-# ── Dynamic Route Injection ──
-# Check if /api/vulnerable/{city} and /api/whatif exist
-vulnerable_exists = any(getattr(route, "path", None) == "/api/vulnerable/{city}" for route in app.routes)
-whatif_exists = any(getattr(route, "path", None) == "/api/whatif" for route in app.routes)
-
-if not vulnerable_exists:
-    @app.get("/api/vulnerable/{city}", response_model=VulnerableResponse, tags=["vulnerable"])
-    def get_vulnerable_locations(city: str):
-        from models.forecaster import get_city_overview
-        overview = get_city_overview()
-        
-        if not overview:
-            overview = [
-                {"ward_id": "WARD-1", "ward_name": "Anand Vihar", "lat": 28.6476, "lon": 77.3158},
-                {"ward_id": "WARD-2", "ward_name": "Punjabi Bagh", "lat": 28.6678, "lon": 77.1234},
-                {"ward_id": "WARD-3", "ward_name": "Mandir Marg", "lat": 28.6341, "lon": 77.2005},
-                {"ward_id": "WARD-4", "ward_name": "R.K. Puram", "lat": 28.5653, "lon": 77.1862},
-                {"ward_id": "WARD-5", "ward_name": "Siri Fort", "lat": 28.5528, "lon": 77.2185},
-            ]
-            
-        types = ["hospital", "school", "elderly_care"]
-        names = {
-            "hospital": "Super Speciality Hospital",
-            "school": "Public School",
-            "elderly_care": "Senior Citizen Home"
-        }
-        
-        locations = []
-        for idx, ward in enumerate(overview):
-            ward_id = ward.get("ward_id")
-            ward_name = ward.get("ward_name")
-            lat = ward.get("lat", 28.6)
-            lon = ward.get("lon", 77.2)
-            
-            loc_type = types[idx % len(types)]
-            locations.append(
-                VulnerableLocation(
-                    name=f"{ward_name} {names[loc_type]}",
-                    type=loc_type,
-                    lat=lat + 0.001 * ((idx % 3) - 1),
-                    lon=lon + 0.001 * ((idx % 2) - 0.5),
-                    ward_id=ward_id,
-                    ward_name=ward_name
-                )
-            )
-            
-        return VulnerableResponse(
-            city=city,
-            total_locations=len(locations),
-            locations=locations
-        )
+# ── Tracked files must be byte-identical after the suite ──
+def _tracked_file_hashes():
+    import hashlib
+    import subprocess
+    try:
+        files = subprocess.run(
+            ["git", "ls-files", "-z", "--", "."], cwd=backend_dir, capture_output=True, check=True,
+        ).stdout.decode().split("\0")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    hashes = {}
+    for rel in filter(None, files):
+        path = os.path.join(backend_dir, rel)
+        if os.path.isfile(path):
+            with open(path, "rb") as f:
+                hashes[rel] = hashlib.sha256(f.read()).hexdigest()
+    return hashes
 
 
+@pytest.fixture(scope="session", autouse=True)
+def tracked_files_unchanged():
+    before = _tracked_file_hashes()
+    yield
+    if before is None:
+        return
+    after = _tracked_file_hashes()
+    changed = sorted(f for f in before if after.get(f) != before[f])
+    assert not changed, f"Tests modified tracked files: {changed}"
 
 
 # ── Pytest Fixture client ──

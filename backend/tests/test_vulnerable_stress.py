@@ -4,8 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 from models.schemas import VulnerableResponse
 
-GEOJSON_PATH = os.path.join("data_store", "geojson", "vulnerable_locations.geojson")
-
 def test_vulnerable_case_insensitivity(client):
     """
     Test that the vulnerable locations endpoint is case-insensitive for Delhi
@@ -25,72 +23,43 @@ def test_vulnerable_case_insensitivity(client):
         response = client.get(f"/api/vulnerable/{other_city}")
         assert response.status_code == 404
 
-def test_vulnerable_geojson_deletion_resilience(client):
-    """
-    Test that if the GeoJSON cache file is deleted, the router handles it
-    by invoking the generator and successfully recreating the GeoJSON
-    without returning an error.
-    """
-    # Backup original geojson if it exists
-    original_geojson_content = None
-    if os.path.exists(GEOJSON_PATH):
-        with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
-            original_geojson_content = f.read()
-        os.remove(GEOJSON_PATH)
+@pytest.fixture
+def facility_file(tmp_path, monkeypatch):
+    """Point the facility endpoint at a temporary copy, never the tracked file."""
+    import routers.vulnerable as vulnerable
+    from services import places
 
-    try:
-        # Confirm that the file is gone
-        assert not os.path.exists(GEOJSON_PATH)
+    path = tmp_path / "vulnerable_locations.geojson"
+    path.write_bytes(open(vulnerable.GEOJSON_PATH, "rb").read())
+    monkeypatch.setattr(vulnerable, "GEOJSON_PATH", str(path))
+    monkeypatch.setattr(places, "FACILITIES_PATH", str(path))
+    places.reset_cache()
+    yield path
+    places.reset_cache()
 
-        # Call the API endpoint
-        response = client.get("/api/vulnerable/delhi")
-        assert response.status_code == 200
-        data = response.json()
-        parsed = VulnerableResponse(**data)
-        assert parsed.city == "delhi"
-        assert parsed.total_locations >= 30
 
-        # Verify that the file was recreated on disk
-        assert os.path.exists(GEOJSON_PATH)
-        with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
-            recreated_data = json.load(f)
-        assert recreated_data["type"] == "FeatureCollection"
-        assert len(recreated_data["features"]) >= 30
+def test_vulnerable_geojson_deletion_resilience(client, facility_file):
+    """A missing facility file is regenerated (as flagged synthetic data) without an error."""
+    facility_file.unlink()
 
-    finally:
-        # Restore the original geojson content
-        if original_geojson_content is not None:
-            os.makedirs(os.path.dirname(GEOJSON_PATH), exist_ok=True)
-            with open(GEOJSON_PATH, "w", encoding="utf-8") as f:
-                f.write(original_geojson_content)
+    response = client.get("/api/vulnerable/delhi")
+    assert response.status_code == 200
+    parsed = VulnerableResponse(**response.json())
+    assert parsed.city == "delhi"
+    assert parsed.total_locations >= 30
+    # External calls are mocked, so the generator falls back to placeholders
+    assert parsed.verified_locations == 0
 
-def test_vulnerable_geojson_corrupted_resilience(client):
-    """
-    Test that if the GeoJSON cache file is corrupted (invalid JSON),
-    the router raises a 500 error.
-    """
-    # Backup original geojson if it exists
-    original_geojson_content = None
-    if os.path.exists(GEOJSON_PATH):
-        with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
-            original_geojson_content = f.read()
+    recreated = json.loads(facility_file.read_text(encoding="utf-8"))
+    assert recreated["type"] == "FeatureCollection"
+    assert len(recreated["features"]) >= 30
+    assert all(f["properties"]["synthetic"] for f in recreated["features"])
 
-    try:
-        # Write corrupted JSON to the file
-        os.makedirs(os.path.dirname(GEOJSON_PATH), exist_ok=True)
-        with open(GEOJSON_PATH, "w", encoding="utf-8") as f:
-            f.write("{invalid_json: true")
 
-        # Call the API endpoint
-        response = client.get("/api/vulnerable/delhi")
-        # Since it's corrupted, we expect HTTP 500 Internal Server Error
-        assert response.status_code == 500
-        assert "Failed to read vulnerable locations data" in response.json()["detail"]
+def test_vulnerable_geojson_corrupted_resilience(client, facility_file):
+    """A corrupted facility file is a clear 500, not a crash."""
+    facility_file.write_text("{invalid_json: true", encoding="utf-8")
 
-    finally:
-        # Restore the original geojson content
-        if original_geojson_content is not None:
-            os.makedirs(os.path.dirname(GEOJSON_PATH), exist_ok=True)
-            with open(GEOJSON_PATH, "w", encoding="utf-8") as f:
-                f.write(original_geojson_content)
-
+    response = client.get("/api/vulnerable/delhi")
+    assert response.status_code == 500
+    assert "Failed to read vulnerable locations data" in response.json()["detail"]
