@@ -10,7 +10,7 @@ An air quality forecasting and intervention platform built for Delhi. Predicts w
 - **Backend:** FastAPI (Python 3.13), Uvicorn
 - **ML Engine:** Optuna-tuned LightGBM (quantile regression: q10/q50/q90), SHAP TreeExplainer for attribution
 - **Chatbot:** Google Gemini 2.5 Flash with RAG (live data injected into prompts), bilingual EN/Hindi
-- **Data Sources:** Open-Meteo Air Quality API (CAMS satellite model), Sentinel-2 NDVI via Google Earth Engine, OpenStreetMap Overpass API (hospitals/schools)
+- **Data Sources:** Open-Meteo Air Quality API (CAMS satellite model), CPCB ground stations via WAQI (calibration), Sentinel-2 NDVI via Google Earth Engine, OpenStreetMap Overpass API (hospitals/schools)
 
 ## Setup Instructions
 
@@ -30,7 +30,32 @@ GEMINI_API_KEY=your_gemini_api_key_here
 GEMINI_MODEL=gemini-2.5-flash
 # Optional, comma-separated frontend origins (defaults to localhost:3000)
 ALLOWED_ORIGINS=http://localhost:3000
+# Free token from https://aqicn.org/data-platform/token/ - enables CPCB ground-station calibration
+WAQI_TOKEN=your_waqi_token_here
+# Optional: minutes between live refreshes (default 30); set ATMOS_LIVE=0 to stay on the bundled sample
+ATMOS_REFRESH_MINUTES=30
 ```
+
+### Live data
+
+The backend refreshes a forecast snapshot in the background (every 30 min by default), so API requests are served from memory in milliseconds:
+
+1. **Model inputs:** hourly pollutants (Open-Meteo / CAMS) for each station plus weather. These are the same sources the model was trained on.
+2. **Prediction:** the LightGBM quantile models predict PM2.5 24h ahead from each of the last 24 hourly feature rows (+1 to +24h), then recursively out to +72h using their own median predictions as lag inputs, with the 10th and 90th percentiles giving the uncertainty band.
+3. **Ground calibration:** CAMS underestimates Delhi PM2.5 and is too coarse to tell neighbouring stations apart, so each station is scaled to its CPCB monitor reading via WAQI; stations without a monitor nearby get an inverse-distance-weighted ratio. Without `WAQI_TOKEN` the forecasts are uncalibrated (`data_source: "model-only"`).
+
+The server needs outbound access to `air-quality-api.open-meteo.com`, `api.open-meteo.com` and `api.waqi.info`. If they are unreachable, it falls back to the bundled Dec 2024 sample and every response reports `data_source: "offline-sample"`, which the UI shows as a banner.
+
+### Retraining the model
+
+The bundled models were trained on only 12 days of data (19–31 Dec 2024), so they have never seen other seasons. To retrain on the full 2023–2024 history (needs access to Open-Meteo, including `archive-api.open-meteo.com`):
+
+```bash
+cd backend
+./retrain.sh
+```
+
+> Training pairs UTC-labelled pollutant data with IST-labelled weather (a 5.5h offset). Live inference reproduces this so predictions stay consistent; fixing it means changing `fetch_weather.py` to UTC and retraining.
 
 Start the server:
 ```bash
@@ -64,24 +89,27 @@ source venv/bin/activate
 pytest tests/ -v
 ```
 
-All 60 tests cover happy paths, boundary conditions, integration flows, and latency SLAs (<500ms per endpoint).
+All 67 tests cover happy paths, boundary conditions, integration flows, latency SLAs (<500ms per endpoint), and the live pipeline (with Open-Meteo/WAQI responses stubbed). Tests always run offline (`ATMOS_LIVE=0`).
 
 ## Features
 
-- **72h Ward-Level Forecast** — LightGBM predicts PM2.5 24h ahead (RMSE 29.90, beating naive persistence baseline of 32.27 by 7.4%), then extrapolates to 72h with diurnal correction and uncertainty bands (q10/q90)
+- **72h Ward-Level Forecast** — LightGBM quantile models (q10/q50/q90) predict PM2.5 for every hour of the next 72h: direct 24h-ahead predictions for +1 to +24h, then recursive steps to +72h, calibrated to CPCB ground readings
 - **SHAP Pollution Attribution** — TreeExplainer computes per-ward feature contributions, grouped into four categories (Traffic & Time, Weather, Historical/Baseline, Geography & Infra)
 - **Enforcement Tickets** — Auto-generated tickets for the worst wards, with real population counts, school/hospital counts from OSM data, and ML-simulated AQI reduction percentages
 - **What-If Simulator** — Zeroes out relevant pollutant features (NO2/CO for traffic, PM10 for construction, SO2 for industrial) and re-runs the model to compute counterfactual AQI reduction
 - **Vulnerability Overlay** — Maps schools, hospitals, and elderly care centers (fetched from OpenStreetMap) against pollution hotspots
 - **Atmos Assistant** — Gemini-powered RAG chatbot that injects live forecast data, blame scores, and enforcement tickets into the prompt. Supports English and Hindi queries
-- **Spatial Interpolation** — Nearest-neighbor interpolation fills 290 GeoJSON wards from 29 monitored stations for a continuous city-wide heatmap
+- **Prediction Map** — Inverse-distance-weighted interpolation fills all 290 wards from the 29 stations; a timeline lets you play or scrub the forecast from now to +72h across the city
+- **Historical Data** — Measured hourly PM2.5, PM10, NO₂, SO₂, CO and O₃ for the last 30 days, city-wide or per ward
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/forecast/{city}` | City overview with all ward forecasts |
+| GET | `/api/forecast/{city}/timeline` | Hourly predicted AQI for every ward (drives the map timeline) |
 | GET | `/api/forecast/{city}/{ward_id}` | Detailed 72h forecast for one ward |
+| GET | `/api/history/{city}` | Measured hourly pollutant history (`?ward_id=`, `?hours=`) |
 | GET | `/api/blame/{city}/{ward_id}` | SHAP attribution breakdown |
 | GET | `/api/enforce/{city}` | Auto-generated enforcement tickets |
 | GET | `/api/vulnerable/{city}` | Schools, hospitals, elderly care centers |
@@ -97,15 +125,16 @@ atmos/
 │   ├── main.py                  # FastAPI entry point
 │   ├── routers/                 # API route handlers
 │   ├── models/                  # ML models, forecaster, schemas
-│   ├── services/                # Chatbot service
+│   ├── services/                # Live data pipeline, chatbot
 │   ├── data/                    # Data ingestion & preprocessing
 │   ├── data_store/              # Trained models, cached data, GeoJSON
-│   ├── tests/                   # 60 pytest tests (4 tiers)
+│   ├── tests/                   # 67 pytest tests
+│   ├── retrain.sh               # Rebuild training data and retrain
 │   └── train_models.py          # Optuna hyperparameter tuning pipeline
 ├── frontend/
 │   ├── app/                     # Next.js pages (forecast, blame, enforce)
 │   ├── components/              # Map, sidebar, topbar
-│   ├── lib/                     # API client, mock data
+│   ├── lib/                     # API client, AQI scale + spatial helpers
 │   └── public/                  # Static assets, GeoJSON
 └── docs/                        # API contract, project docs
 ```

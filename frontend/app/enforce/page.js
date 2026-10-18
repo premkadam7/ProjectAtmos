@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getEnforce } from '@/lib/api';
+import { getAqiColor } from '@/lib/aqi';
 
 const urgencyColors = {
   HIGH: '#ef4444',
@@ -15,14 +16,6 @@ const urgencyBg = {
   LOW: 'rgba(250, 204, 21, 0.1)',
 };
 
-function getAqiColor(aqi) {
-  if (aqi <= 50) return '#4ade80';
-  if (aqi <= 100) return '#a3e635';
-  if (aqi <= 200) return '#facc15';
-  if (aqi <= 300) return '#fb923c';
-  if (aqi <= 400) return '#f97316';
-  return '#ef4444';
-}
 
 export default function EnforcePage() {
   const [data, setData] = useState(null);

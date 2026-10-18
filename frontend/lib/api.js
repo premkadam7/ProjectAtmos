@@ -10,22 +10,43 @@ import {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// Backend data refreshes every ~30 min, so reuse GET responses briefly: this
+// dedupes concurrent requests and makes moving between pages instant.
+const CACHE_TTL_MS = 60 * 1000;
+const responseCache = new Map();
+
+function cachedGet(path) {
+  const hit = responseCache.get(path);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise;
+  const promise = fetch(`${BASE_URL}${path}`).then((res) => res.json());
+  responseCache.set(path, { at: Date.now(), promise });
+  promise.catch(() => responseCache.delete(path));
+  return promise;
+}
+
 export async function getForecast(city) {
   if (USE_MOCK) return mockForecast;
-  const res = await fetch(`${BASE_URL}/api/forecast/${city}`);
-  return res.json();
+  return cachedGet(`/api/forecast/${city}`);
 }
 
 export async function getWardDetail(city, wardId) {
   if (USE_MOCK) return mockWardDetail;
-  const res = await fetch(`${BASE_URL}/api/forecast/${city}/${wardId}`);
-  return res.json();
+  return cachedGet(`/api/forecast/${city}/${wardId}`);
 }
 
 export async function getBlame(city, wardId) {
   if (USE_MOCK) return mockBlame;
-  const res = await fetch(`${BASE_URL}/api/blame/${city}/${wardId}`);
-  return res.json();
+  return cachedGet(`/api/blame/${city}/${wardId}`);
+}
+
+export async function getTimeline(city) {
+  return cachedGet(`/api/forecast/${city}/timeline`);
+}
+
+export async function getHistory(city, { wardId, hours = 720 } = {}) {
+  const params = new URLSearchParams({ hours: String(hours) });
+  if (wardId) params.set('ward_id', wardId);
+  return cachedGet(`/api/history/${city}?${params}`);
 }
 
 export async function getEnforce(city) {
