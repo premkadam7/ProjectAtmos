@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timezone
+from routers.validation import supported_city
 from models.forecaster import get_city_overview, get_city_hourly, get_ward_forecast, get_data_source
 
 router = APIRouter(prefix="/api/forecast", tags=["forecast"])
 
 @router.get("/{city}")
-def get_city_forecast(city: str):
+def get_city_forecast(city: str = Depends(supported_city)):
     overview = get_city_overview()
     if not overview:
-        return {"error": "Data not available."}
+        raise HTTPException(status_code=503, detail="Forecast data is not available yet.")
 
     aqi_values = [w["current_aqi"] for w in overview]
     worst = max(overview, key=lambda w: w["current_aqi"])
@@ -26,15 +27,13 @@ def get_city_forecast(city: str):
     }
 
 @router.get("/{city}/timeline")
-def get_city_timeline(city: str):
+def get_city_timeline(city: str = Depends(supported_city)):
     """Hourly predicted AQI for every ward over the forecast horizon (drives the map time slider)."""
     return {"city": city, **get_data_source(), **get_city_hourly()}
 
 @router.get("/{city}/{ward_id}")
-def get_ward_forecast_endpoint(city: str, ward_id: str, hours: int = Query(72, ge=1, le=72)):
+def get_ward_forecast_endpoint(ward_id: str, city: str = Depends(supported_city), hours: int = Query(72, ge=1, le=72)):
     forecast_data = get_ward_forecast(ward_id, hours)
-    if not forecast_data:
-        return {"error": f"Ward {ward_id} not found."}
 
     return {
         "ward_id": forecast_data["ward_id"],

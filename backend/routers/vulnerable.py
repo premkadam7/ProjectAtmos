@@ -1,6 +1,7 @@
 import os
 import json
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from routers.validation import supported_city
 from models.schemas import VulnerableResponse, VulnerableLocation
 from services.places import is_verified
 
@@ -9,14 +10,7 @@ router = APIRouter(prefix="/api/vulnerable", tags=["vulnerable"])
 GEOJSON_PATH = os.path.join(os.path.dirname(__file__), "..", "data_store", "geojson", "vulnerable_locations.geojson")
 
 @router.get("/{city}", response_model=VulnerableResponse)
-def get_vulnerable_locations(city: str):
-    if city.lower() != "delhi":
-        return VulnerableResponse(
-            city=city,
-            total_locations=0,
-            locations=[]
-        )
-        
+def get_vulnerable_locations(city: str = Depends(supported_city)):
     if not os.path.exists(GEOJSON_PATH):
         try:
             from data.fetch_vulnerable import main as fetch_main

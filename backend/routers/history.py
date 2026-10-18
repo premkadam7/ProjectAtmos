@@ -1,12 +1,13 @@
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+from routers.validation import supported_city
 from models.forecaster import HISTORY_SERIES_INFO, get_history, get_data_source
 
 router = APIRouter(prefix="/api/history", tags=["history"])
 
 @router.get("/{city}")
 def get_city_history(
-    city: str,
+    city: str = Depends(supported_city),
     ward_id: Optional[str] = None,
     hours: int = Query(24 * 30, ge=1, le=24 * 31),
 ):

@@ -23,12 +23,7 @@ def test_vulnerable_case_insensitivity(client):
 
     for other_city in ["mumbai", "MUMBAI", "newyork"]:
         response = client.get(f"/api/vulnerable/{other_city}")
-        assert response.status_code == 200
-        data = response.json()
-        parsed = VulnerableResponse(**data)
-        assert parsed.city == other_city
-        assert parsed.total_locations == 0
-        assert len(parsed.locations) == 0
+        assert response.status_code == 404
 
 def test_vulnerable_geojson_deletion_resilience(client):
     """

@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
 import os
@@ -11,6 +12,7 @@ load_dotenv()
 
 from routers import forecast, blame, enforce, chat, vulnerable, whatif, history
 from services.live_pipeline import start_background_refresh
+from models.forecaster import UnknownWardError, UnsupportedInterventionError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,6 +49,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.exception_handler(UnknownWardError)
+async def unknown_ward_handler(request: Request, exc: UnknownWardError):
+    return JSONResponse(status_code=404, content={"detail": f"Unknown ward_id '{exc.ward_id}'"})
+
+
+@app.exception_handler(UnsupportedInterventionError)
+async def unsupported_intervention_handler(request: Request, exc: UnsupportedInterventionError):
+    return JSONResponse(status_code=422, content={"detail": str(exc)})
+
 
 app.include_router(forecast.router)
 app.include_router(blame.router)

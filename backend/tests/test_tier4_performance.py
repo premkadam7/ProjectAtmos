@@ -10,9 +10,9 @@ from main import app
 def test_latency_sla_under_500ms(client):
     endpoints = [
         ("/api/forecast/delhi", "GET", None),
-        ("/api/forecast/delhi/anand_vihar", "GET", None),
+        ("/api/forecast/delhi/i.p_extention", "GET", None),
         ("/api/chat", "POST", {"message": "Hello, tell me about Rohini Sector 7", "language": "en"}),
-        ("/api/whatif", "POST", {"ward_id": "anand_vihar", "intervention": "pause_construction", "duration_hours": 24})
+        ("/api/whatif", "POST", {"ward_id": "i.p_extention", "intervention": "pause_construction", "duration_hours": 24})
     ]
 
     for path, method, payload in endpoints:
@@ -87,7 +87,7 @@ def test_sse_chat_response_format(client):
 async def test_concurrent_forecast_requests_async():
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://testserver") as ac:
         tasks = [
-            ac.get("/api/forecast/delhi/anand_vihar?hours=24")
+            ac.get("/api/forecast/delhi/i.p_extention?hours=24")
             for _ in range(10)
         ]
         
