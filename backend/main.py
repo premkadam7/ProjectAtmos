@@ -34,8 +34,10 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # Comma-separated list of frontend origins allowed to call the API
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
+    # Deployed frontends: comma-separated ALLOWED_ORIGINS. Local and LAN dev
+    # servers on any port are always allowed (Next.js moves off 3000 when busy).
+    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()],
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\]|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
