@@ -28,8 +28,8 @@ Create a `.env` file in `backend/`:
 GEMINI_API_KEY=your_gemini_api_key_here
 # Optional, defaults to gemini-2.5-flash
 GEMINI_MODEL=gemini-2.5-flash
-# Deployed frontend URL(s), comma-separated. Local/LAN dev servers on any port are always allowed.
-ALLOWED_ORIGINS=https://your-frontend.example.com
+# Optional: only let these sites call the API (comma-separated). Default: any site.
+# ALLOWED_ORIGINS=https://your-frontend.example.com
 # Free token from https://aqicn.org/data-platform/token/ - enables CPCB ground-station calibration
 WAQI_TOKEN=your_waqi_token_here
 # Optional: minutes between live refreshes (default 30); set ATMOS_LIVE=0 to stay on the bundled sample

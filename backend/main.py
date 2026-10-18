@@ -32,13 +32,18 @@ app = FastAPI(
     version="0.1.0",
 )
 
+# The API serves public, read-only data and the frontend sends no cookies, so
+# any site may call it by default. Set ALLOWED_ORIGINS (comma-separated) to
+# restrict it to specific frontends; local/LAN dev servers stay allowed then.
+_allowed = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    # Deployed frontends: comma-separated ALLOWED_ORIGINS. Local and LAN dev
-    # servers on any port are always allowed (Next.js moves off 3000 when busy).
-    allow_origins=[o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1|\[::1\]|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?",
-    allow_credentials=True,
+    allow_origins=_allowed or ["*"],
+    allow_origin_regex=(
+        r"https?://(localhost|127\.0\.0\.1|\[::1\]|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})(:\d+)?"
+        if _allowed else None
+    ),
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
