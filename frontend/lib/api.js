@@ -27,20 +27,6 @@ function cachedGet(path) {
   return promise;
 }
 
-// Backend data refreshes every ~30 min, so reuse GET responses briefly: this
-// dedupes concurrent requests and makes moving between pages instant.
-const CACHE_TTL_MS = 60 * 1000;
-const responseCache = new Map();
-
-function cachedGet(path) {
-  const hit = responseCache.get(path);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise;
-  const promise = fetch(`${BASE_URL}${path}`).then((res) => res.json());
-  responseCache.set(path, { at: Date.now(), promise });
-  promise.catch(() => responseCache.delete(path));
-  return promise;
-}
-
 export async function getForecast(city) {
   if (USE_MOCK) return mockForecast;
   return cachedGet(`/api/forecast/${city}`);
