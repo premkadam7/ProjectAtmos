@@ -7,6 +7,12 @@ import pytest
 from services import live_pipeline as lp
 
 
+@pytest.fixture(autouse=True)
+def isolated_runtime(monkeypatch, tmp_path):
+    monkeypatch.setattr(lp, "RUNTIME_DIR", str(tmp_path))
+    monkeypatch.setattr(lp, "SNAPSHOT_PATH", str(tmp_path / "live_snapshot.pkl"))
+
+
 def _now():
     return pd.Timestamp(datetime.now(timezone.utc)).tz_localize(None).floor("h")
 
@@ -23,8 +29,9 @@ class _Resp:
 
 
 @pytest.fixture
-def fake_http(monkeypatch):
+def fake_http(monkeypatch, tmp_path):
     """Serve the bundled sample, shifted so it covers now-250h .. now+49h."""
+    monkeypatch.setattr(lp, "RUNTIME_DIR", str(tmp_path))
     res = lp._load_resources()
     sample = res["sample"].sort_values(["station", "timestamp"])
     stations = res["stations"]

@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback } from 'react';
 
 // Fetches current Delhi weather from Open-Meteo, formatted for the sidebar card
 async function fetchWeatherData() {
-  const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto');
+  const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=GMT');
+  if (!res.ok) throw new Error(`Weather API: ${res.status}`);
   const data = await res.json();
   const current = data.current;
   
@@ -16,9 +17,9 @@ async function fetchWeatherData() {
   if (current.weather_code >= 51 && current.weather_code <= 67) { condition = 'Rain'; icon = '🌧️'; }
   if (current.weather_code >= 95) { condition = 'Thunderstorm'; icon = '⛈️'; }
 
-  const date = new Date(current.time);
+  const date = new Date(current.time + 'Z');
   const formattedDate = date.toLocaleString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
+    timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: true
   });
 
@@ -178,7 +179,7 @@ export default function Sidebar() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '8px', padding: '0 4px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>Last updated</span>
+            <span style={{ fontSize: '10px', color: 'var(--text-dim)' }}>Weather updated (IST)</span>
             <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{weather.lastUpdated}</span>
           </div>
           <span 

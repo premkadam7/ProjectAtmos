@@ -229,7 +229,8 @@ function WardDetailPanel({ ward, detail, blame, detailError, blameError, onRetry
 /* ========== PAGE ========== */
 export default function ForecastPage() {
   const [forecastData, setForecastData] = useState(null);
-  const [selectedWard, setSelectedWard] = useState(null);
+  const [selection, setSelectedWard] = useState(null);
+  const selectedWard = forecastData?.wards?.find(w => w.ward_id === selection?.ward_id) ?? selection;
   const [forecastError, setForecastError] = useState(null);
   const [detailState, setDetailState]   = useState({ wardId: null, data: null, error: null });
   const [blameState, setBlameState]     = useState({ wardId: null, data: null, error: null });
@@ -237,6 +238,13 @@ export default function ForecastPage() {
   const [timeline, setTimeline]         = useState(null);
   const [reload, setReload]             = useState(0);
   const [detailReload, setDetailReload] = useState(0);
+
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden) setReload(n => n + 1); };
+    const timer = setInterval(refresh, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, []);
 
   useEffect(() => {
     getForecast('delhi')
@@ -254,7 +262,7 @@ export default function ForecastPage() {
     getBlame('delhi', wardId)
       .then((data) => setBlameState({ wardId, data, error: null }))
       .catch((error) => setBlameState({ wardId, data: null, error }));
-  }, [selectedWard, detailReload]);
+  }, [selectedWard, detailReload, forecastData]);
 
   const current = (state) => (state.wardId === selectedWard?.ward_id ? state : { data: null, error: null });
   const wardDetail = current(detailState).data;
@@ -283,7 +291,7 @@ export default function ForecastPage() {
         <div>
           <h2 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--text-primary)' }}>Forecast Map</h2>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Ward-level AQI predictions for the next 72 hours — scrub the timeline, click a station for details
+            Station forecasts and interpolated ward estimates — scrub the timeline, click a station for details
           </p>
         </div>
 
@@ -291,7 +299,7 @@ export default function ForecastPage() {
         <div style={{ position: 'relative', width: '280px', flexShrink: 0 }}>
           <input
             type="text"
-            placeholder="Search ward..."
+            placeholder="Search station..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
@@ -334,9 +342,16 @@ export default function ForecastPage() {
         </div>
       </div>
 
+      {forecastData && <div className="notice">
+        {forecastData.data_source === 'offline-sample' ? 'Historical sample' : forecastData.freshness?.status === 'stale' ? 'Stale data' : forecastData.source_detail}
+        {' · Base time: '}{new Date(forecastData.observed_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} IST.
+        Ward colours are spatial estimates, not ward measurements.
+        {forecastData.ground_stations === 0 && ' No ground calibration is available; nearby wards may share regional inputs.'}
+      </div>}
       {/* Map */}
       {forecastData ? (
         <PredictionMap
+          source={forecastData}
           wards={wards}
           timeline={timeline}
           selectedWardId={selectedWard?.ward_id}
@@ -347,7 +362,7 @@ export default function ForecastPage() {
       ) : <div className="skeleton" style={{ height: 600, borderRadius: 20 }} />}
 
       {/* Ward summary table */}
-      <Card title="All Wards — AQI Summary">
+      <Card title="Station locations — AQI summary">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           {[...wards].sort((a, b) => b.current_aqi - a.current_aqi).map((ward, i) => (
             <div
