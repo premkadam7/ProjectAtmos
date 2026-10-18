@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { BASE_URL, getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
+import { getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
 import { getAqiColor, getAqiLabel, SOURCE_INFO } from '@/lib/aqi';
 import Card from '@/components/common/Card';
 import CountUp from '@/components/common/CountUp';
+import LoadError from '@/components/common/LoadError';
 
 const PredictionMap = dynamic(() => import('@/components/common/PredictionMap'), {
   ssr: false,
@@ -161,14 +162,18 @@ function LiveAqiCard({ aqi, pm25, pm10, observedAt, animOrder = 0 }) {
 }
 
 /* ---------- 72h forecast chart for one ward (model median + 10–90% band) ---------- */
-function ForecastCard({ ward, detail, animOrder = 0 }) {
+function ForecastCard({ ward, detail, error, onRetry, animOrder = 0 }) {
   const [hover, setHover] = useState(null);
   const [boxRef, W] = useWidth();
 
   if (!detail?.hourly?.length) {
     return (
       <Card title="72-hour forecast" className="stagger-in" style={{ flex: 1.4, animationDelay: `${animOrder * 0.08}s` }}>
-        <div ref={boxRef}><Skeleton height={250} /></div>
+        <div ref={boxRef}>
+          {error
+            ? <LoadError compact title={`Couldn't load the forecast for ${ward?.ward_name ?? 'this ward'}`} error={error} onRetry={onRetry} />
+            : <Skeleton height={250} />}
+        </div>
       </Card>
     );
   }
@@ -477,7 +482,7 @@ function bucketSeries(series, hours, bucket, key) {
     .map(([, e]) => ({ date: new Date(e.t), value: e.sum / e.n }));
 }
 
-function HistoricalCard({ history, animOrder = 0 }) {
+function HistoricalCard({ history, error, onRetry, animOrder = 0 }) {
   const [range, setRange] = useState('24h');
   const [key, setKey] = useState('aqi');
   const [chartType, setChartType] = useState('line');
@@ -526,7 +531,8 @@ function HistoricalCard({ history, animOrder = 0 }) {
         ))}
       </div>
 
-      {!history ? <Skeleton height={230} /> : series.length < 2 ? (
+      {!history && error ? <LoadError compact title="Couldn't load history" error={error} onRetry={onRetry} />
+        : !history ? <Skeleton height={230} /> : series.length < 2 ? (
         <p style={{ color: 'var(--text-dim)', fontSize: '13px', padding: '40px 0', textAlign: 'center' }}>Not enough history yet.</p>
       ) : (
         <HistoryChart series={series} chartType={chartType} isAqi={key === 'aqi'} fmt={fmt} axisLabel={axisLabel} chartKey={`${range}-${key}-${chartType}`} />
@@ -613,7 +619,10 @@ export default function Home() {
   const [timeline, setTimeline] = useState(null);
   const [history, setHistory] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
-  const [detail, setDetail] = useState({ wardId: null, data: null });
+  const [detail, setDetail] = useState({ wardId: null, data: null, error: null });
+  const [detailReload, setDetailReload] = useState(0);
+  const [historyError, setHistoryError] = useState(null);
+  const [historyReload, setHistoryReload] = useState(0);
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -628,15 +637,18 @@ export default function Home() {
         setData(d);
       })
       .catch((err) => {
-        setError(err.message === 'Failed to fetch' || err.name === 'TypeError'
-          ? 'No response (the server is not running, the URL is wrong, or CORS blocked this site)'
-          : err.message);
+        setError(err);
         if (attempt < 4) retryTimer = setTimeout(() => setAttempt((a) => a + 1), 3000 * 2 ** attempt);
       });
-    getTimeline('delhi').then(setTimeline).catch(() => {});
-    getHistory('delhi', { hours: 720 }).then(setHistory).catch(() => {});
+    getTimeline('delhi').then(setTimeline).catch(() => {});   // the map works without the timeline
     return () => clearTimeout(retryTimer);
   }, [attempt]);
+
+  useEffect(() => {
+    getHistory('delhi', { hours: 720 })
+      .then((h) => { setHistoryError(null); setHistory(h); })
+      .catch(setHistoryError);
+  }, [historyReload, attempt]);
 
   const wards = useMemo(() => data?.wards ?? [], [data]);
   const worst = useMemo(() => [...wards].sort((a, b) => b.current_aqi - a.current_aqi), [wards]);
@@ -645,10 +657,13 @@ export default function Home() {
   useEffect(() => {
     if (!selectedWard) return;
     const wardId = selectedWard.ward_id;
-    getWardDetail('delhi', wardId).then((d) => setDetail({ wardId, data: d })).catch(() => {});
-  }, [selectedWard]);
+    getWardDetail('delhi', wardId)
+      .then((d) => setDetail({ wardId, data: d, error: null }))
+      .catch((err) => setDetail({ wardId, data: null, error: err }));
+  }, [selectedWard, detailReload]);
 
-  const wardDetail = detail.wardId === selectedWard?.ward_id ? detail.data : null;
+  const currentDetail = detail.wardId === selectedWard?.ward_id ? detail : { data: null, error: null };
+  const wardDetail = currentDetail.data;
   // Current PM comes from the per-ward current values (CPCB-calibrated when live);
   // gases are only available from the CAMS model history.
   const latestModelled = history?.series?.[history.series.length - 1];
@@ -660,15 +675,12 @@ export default function Home() {
     : null;
 
   if (error && !data) return (
-    <div className="api-error">
-      <p className="api-error-title">Couldn&apos;t reach the Atmos API</p>
-      <p>{error}</p>
-      <p>
-        Tried <code>{BASE_URL}/api/forecast/delhi</code>
-        {attempt < 4 ? ' · retrying automatically…' : ''}
-      </p>
-      <button className="api-error-retry" onClick={() => setAttempt((a) => a + 1)}>Retry now</button>
-    </div>
+    <LoadError
+      title="Couldn't reach the Atmos API"
+      error={error}
+      note={attempt < 4 ? 'retrying automatically…' : undefined}
+      onRetry={() => setAttempt((a) => a + 1)}
+    />
   );
 
   const cityAqi = data ? Math.round(data.city_avg_aqi) : null;
@@ -720,7 +732,13 @@ export default function Home() {
         {data ? (
           <LiveAqiCard aqi={cityAqi} pm25={cityPm25} pm10={cityPm10} observedAt={data.observed_at} animOrder={0} />
         ) : <Skeleton height={340} style={{ flex: 1 }} />}
-        <ForecastCard ward={selectedWard} detail={wardDetail} animOrder={1} />
+        <ForecastCard
+          ward={selectedWard}
+          detail={wardDetail}
+          error={currentDetail.error}
+          onRetry={() => setDetailReload((n) => n + 1)}
+          animOrder={1}
+        />
       </div>
 
       <div className="dash-row">
@@ -730,7 +748,7 @@ export default function Home() {
         <TopPollutantsCard latest={latest} calibrated={data?.data_source === 'live'} animOrder={3} />
       </div>
 
-      <HistoricalCard history={history} animOrder={4} />
+      <HistoricalCard history={history} error={historyError} onRetry={() => setHistoryReload((n) => n + 1)} animOrder={4} />
 
       {/* Ward rankings */}
       <Card title="All wards — now and in 24h" className="stagger-in" style={{ animationDelay: '0.4s' }}>

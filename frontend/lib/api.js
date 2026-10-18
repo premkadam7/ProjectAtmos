@@ -10,6 +10,52 @@ import {
 
 export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+export class ApiError extends Error {
+  constructor(message, { status = null, path = '' } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.path = path;
+  }
+}
+
+/**
+ * fetch with a timeout that throws ApiError for network failures, timeouts,
+ * non-2xx responses (using the backend's `detail` message) and non-JSON bodies.
+ */
+async function request(path, { method = 'GET', body, timeoutMs = 30000 } = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      signal: controller.signal,
+      ...(body !== undefined && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+    });
+  } catch (err) {
+    throw new ApiError(
+      err.name === 'AbortError'
+        ? `No response within ${timeoutMs / 1000}s`
+        : 'No response (the server is not running, the URL is wrong, or CORS blocked this site)',
+      { path },
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    if (res.ok) throw new ApiError(`API returned an unreadable response for ${path}`, { status: res.status, path });
+  }
+  if (!res.ok) {
+    const detail = typeof data?.detail === 'string' ? data.detail : `API responded ${res.status}`;
+    throw new ApiError(detail, { status: res.status, path });
+  }
+  return data;
+}
+
 // Backend data refreshes every ~30 min, so reuse GET responses briefly: this
 // dedupes concurrent requests and makes moving between pages instant.
 const CACHE_TTL_MS = 60 * 1000;
@@ -18,10 +64,7 @@ const responseCache = new Map();
 function cachedGet(path) {
   const hit = responseCache.get(path);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.promise;
-  const promise = fetch(`${BASE_URL}${path}`).then((res) => {
-    if (!res.ok) throw new Error(`API responded ${res.status} for ${path}`);
-    return res.json();
-  });
+  const promise = request(path);
   responseCache.set(path, { at: Date.now(), promise });
   promise.catch(() => responseCache.delete(path));
   return promise;
@@ -54,24 +97,20 @@ export async function getHistory(city, { wardId, hours = 720 } = {}) {
 
 export async function getEnforce(city) {
   if (USE_MOCK) return mockEnforce;
-  const res = await fetch(`${BASE_URL}/api/enforce/${city}`);
-  return res.json();
+  return cachedGet(`/api/enforce/${city}`);
 }
 
 export async function getVulnerable(city) {
   if (USE_MOCK) return mockVulnerable;
-  const res = await fetch(`${BASE_URL}/api/vulnerable/${city}`);
-  return res.json();
+  return cachedGet(`/api/vulnerable/${city}`);
 }
 
 export async function postWhatIf(wardId, intervention, durationHours) {
   if (USE_MOCK) return mockWhatIf;
-  const res = await fetch(`${BASE_URL}/api/whatif`, {
+  return request('/api/whatif', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ward_id: wardId, intervention, duration_hours: durationHours }),
+    body: { ward_id: wardId, intervention, duration_hours: durationHours },
   });
-  return res.json();
 }
 
 export async function postChat(message, language = 'en', conversationId = null) {
@@ -81,10 +120,9 @@ export async function postChat(message, language = 'en', conversationId = null) 
     conversation_id: 'mock_conv_001',
     sources: ['Mock Data'],
   };
-  const res = await fetch(`${BASE_URL}/api/chat`, {
+  return request('/api/chat', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, language, conversation_id: conversationId }),
+    body: { message, language, conversation_id: conversationId },
+    timeoutMs: 60000,
   });
-  return res.json();
 }

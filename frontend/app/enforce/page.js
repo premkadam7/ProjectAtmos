@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getEnforce } from '@/lib/api';
+import LoadError from '@/components/common/LoadError';
 import { getAqiColor } from '@/lib/aqi';
 
 const urgencyColors = {
@@ -19,12 +20,24 @@ const urgencyBg = {
 
 export default function EnforcePage() {
   const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [reload, setReload] = useState(0);
   const [filter, setFilter] = useState('ALL');
   const [sort, setSort] = useState('urgency');
 
   useEffect(() => {
-    getEnforce('delhi').then(setData);
-  }, []);
+    getEnforce('delhi')
+      .then((d) => {
+        if (!Array.isArray(d?.tickets)) throw new Error('The API returned no ticket list');
+        setError(null);
+        setData(d);
+      })
+      .catch(setError);
+  }, [reload]);
+
+  if (error && !data) {
+    return <LoadError title="Couldn't load enforcement tickets" error={error} onRetry={() => setReload((n) => n + 1)} />;
+  }
 
   if (!data) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)' }}>

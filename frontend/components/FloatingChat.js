@@ -43,8 +43,8 @@ export default function FloatingChat() {
       const res = await postChat(msg, language, convId);
       setConvId(res.conversation_id);
       setMessages(prev => [...prev, { role: 'bot', text: res.response }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'bot', text: 'Sorry, something went wrong. Try again.' }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'bot', text: `Sorry, I couldn't answer that (${err.message}). Try again.` }]);
     } finally {
       setLoading(false);
     }
