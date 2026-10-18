@@ -16,7 +16,7 @@ The platform has three core capabilities:
 |-------|------|---------|
 | Backend | Python 3.13, FastAPI, Uvicorn | API server, ML inference, data pipeline |
 | ML | LightGBM (Optuna-tuned), SHAP TreeExplainer | Forecasting, attribution |
-| Chatbot | Google Gemini 1.5 Flash + RAG | Context-aware Q&A in English and Hindi |
+| Chatbot | Google Gemini 2.5 Flash + RAG | Context-aware Q&A in English and Hindi |
 | Frontend | Next.js 16, React, Leaflet, Recharts | Dashboard, maps, charts |
 | Data | Open-Meteo API (CAMS satellite), Sentinel-2 NDVI, OpenStreetMap | Historical pollution, vegetation, vulnerable locations |
 
@@ -89,7 +89,7 @@ Uses `shap.TreeExplainer` on the champion q50 model. For each ward:
 
 ### 3.7 Chatbot (RAG)
 
-`services/chatbot.py` uses Google Gemini 1.5 Flash with RAG:
+`services/chatbot.py` uses Google Gemini 2.5 Flash with RAG:
 - Before each query, builds a context payload from live data: city average AQI, worst wards, active enforcement tickets, per-ward blame scores
 - Injects this data into the Gemini system prompt
 - Supports English and Hindi queries with fuzzy ward-name matching

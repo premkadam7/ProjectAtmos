@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timezone
+import os
 import uvicorn
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from routers import forecast, blame, enforce, chat, vulnerable, whatif
 
@@ -13,7 +17,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    # Comma-separated list of frontend origins allowed to call the API
+    allow_origins=os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

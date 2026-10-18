@@ -1,7 +1,36 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+// Fetches current Delhi weather from Open-Meteo, formatted for the sidebar card
+async function fetchWeatherData() {
+  const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto');
+  const data = await res.json();
+  const current = data.current;
+  
+  let condition = 'Clear';
+  let icon = '☀️';
+  if (current.weather_code >= 1 && current.weather_code <= 3) { condition = 'Partly Cloudy'; icon = '⛅'; }
+  if (current.weather_code >= 45 && current.weather_code <= 48) { condition = 'Haze / Fog'; icon = '🌫️'; }
+  if (current.weather_code >= 51 && current.weather_code <= 67) { condition = 'Rain'; icon = '🌧️'; }
+  if (current.weather_code >= 95) { condition = 'Thunderstorm'; icon = '⛈️'; }
+
+  const date = new Date(current.time);
+  const formattedDate = date.toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true
+  });
+
+  return {
+    temp: `${Math.round(current.temperature_2m)}°C`,
+    condition: condition,
+    humidity: `${current.relative_humidity_2m}%`,
+    wind: `${Math.round(current.wind_speed_10m)} km/h`,
+    lastUpdated: formattedDate,
+    icon: icon
+  };
+}
 
 export default function Sidebar() {
   const pathname = usePathname() || '/';
@@ -18,48 +47,27 @@ export default function Sidebar() {
     lastUpdated: 'Fetching...',
     icon: '⛅'
   });
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(true);
 
-  const fetchWeather = async () => {
+  const loadWeather = useCallback(() =>
+    fetchWeatherData()
+      .then(setWeather)
+      .catch((error) => {
+        console.error("Failed to fetch weather", error);
+        setWeather(prev => ({ ...prev, condition: 'Failed to load' }));
+      })
+      .finally(() => setTimeout(() => setIsRefreshing(false), 500)), []);
+
+  const fetchWeather = useCallback(() => {
     setIsRefreshing(true);
-    try {
-      const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=28.6139&longitude=77.2090&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto');
-      const data = await res.json();
-      const current = data.current;
-      
-      let condition = 'Clear';
-      let icon = '☀️';
-      if (current.weather_code >= 1 && current.weather_code <= 3) { condition = 'Partly Cloudy'; icon = '⛅'; }
-      if (current.weather_code >= 45 && current.weather_code <= 48) { condition = 'Haze / Fog'; icon = '🌫️'; }
-      if (current.weather_code >= 51 && current.weather_code <= 67) { condition = 'Rain'; icon = '🌧️'; }
-      if (current.weather_code >= 95) { condition = 'Thunderstorm'; icon = '⛈️'; }
-
-      const date = new Date(current.time);
-      const formattedDate = date.toLocaleString('en-IN', {
-        day: '2-digit', month: 'short', year: 'numeric',
-        hour: '2-digit', minute: '2-digit', hour12: true
-      });
-
-      setWeather({
-        temp: `${Math.round(current.temperature_2m)}°C`,
-        condition: condition,
-        humidity: `${current.relative_humidity_2m}%`,
-        wind: `${Math.round(current.wind_speed_10m)} km/h`,
-        lastUpdated: formattedDate,
-        icon: icon
-      });
-    } catch (error) {
-      console.error("Failed to fetch weather", error);
-      setWeather(prev => ({ ...prev, condition: 'Failed to load' }));
-    }
-    setTimeout(() => setIsRefreshing(false), 500); 
-  };
+    loadWeather();
+  }, [loadWeather]);
 
   useEffect(() => {
-    fetchWeather();
+    loadWeather();
     const interval = setInterval(fetchWeather, 30 * 60 * 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [loadWeather, fetchWeather]);
 
   const navItems = [
     { 

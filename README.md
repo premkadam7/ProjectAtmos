@@ -9,7 +9,7 @@ An air quality forecasting and intervention platform built for Delhi. Predicts w
 - **Frontend:** Next.js 16 (App Router), React, Leaflet (maps), Recharts (charts), Vanilla CSS
 - **Backend:** FastAPI (Python 3.13), Uvicorn
 - **ML Engine:** Optuna-tuned LightGBM (quantile regression: q10/q50/q90), SHAP TreeExplainer for attribution
-- **Chatbot:** Google Gemini 1.5 Flash with RAG (live data injected into prompts), bilingual EN/Hindi
+- **Chatbot:** Google Gemini 2.5 Flash with RAG (live data injected into prompts), bilingual EN/Hindi
 - **Data Sources:** Open-Meteo Air Quality API (CAMS satellite model), Sentinel-2 NDVI via Google Earth Engine, OpenStreetMap Overpass API (hospitals/schools)
 
 ## Setup Instructions
@@ -26,6 +26,10 @@ pip install -r requirements.txt
 Create a `.env` file in `backend/`:
 ```
 GEMINI_API_KEY=your_gemini_api_key_here
+# Optional, defaults to gemini-2.5-flash
+GEMINI_MODEL=gemini-2.5-flash
+# Optional, comma-separated frontend origins (defaults to localhost:3000)
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 Start the server:
