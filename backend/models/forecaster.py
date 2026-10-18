@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 from data.ingest import calculate_aqi_from_pm25
-from services.live_pipeline import get_snapshot, model_predict, POLLUTANTS
+from services.live_pipeline import freshness, get_snapshot, model_predict, POLLUTANTS
 
 
 def _pm25_to_aqi(pm25):
@@ -35,6 +35,7 @@ def get_data_source():
         "observed_at": snap["observed_at"],
         "generated_at": snap["generated_at"],
         "ground_stations": snap["ground_stations"],
+        "freshness": freshness(snap),
     }
 
 

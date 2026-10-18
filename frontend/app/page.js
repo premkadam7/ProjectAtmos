@@ -63,10 +63,17 @@ function formatTime(iso, opts = { hour: 'numeric', minute: '2-digit', hour12: tr
   return new Date(iso).toLocaleString('en-IN', opts);
 }
 
+function formatAge(minutes) {
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h`;
+  return `${Math.round(minutes / 1440)} days`;
+}
+
 /* ---------- Data source badge ---------- */
 function DataSourceBadge({ data }) {
   if (!data?.data_source) return null;
-  const info = SOURCE_INFO[data.data_source] || SOURCE_INFO['offline-sample'];
+  const stale = data.freshness?.status === 'stale';
+  const info = stale ? SOURCE_INFO.stale : (SOURCE_INFO[data.data_source] || SOURCE_INFO['offline-sample']);
   const observed = formatTime(data.observed_at, { day: '2-digit', month: 'short', hour: 'numeric', hour12: true });
   return (
     <div className="source-badge" title={data.source_detail} style={{ '--c': info.tone }}>
@@ -647,6 +654,14 @@ export default function Home() {
         </div>
         <DataSourceBadge data={data} />
       </div>
+
+      {data?.freshness?.status === 'stale' && (
+        <div className="notice">
+          Live updates are failing, so this data is {formatAge(data.freshness.data_age_minutes)} old
+          (observed {formatTime(data.observed_at, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}).
+          Current conditions may differ.
+        </div>
+      )}
 
       {data?.data_source === 'offline-sample' && (
         <div className="notice">
