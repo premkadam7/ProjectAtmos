@@ -1,31 +1,39 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+
+const listeners = new Set();
+
+function subscribe(callback) {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
+}
+
+function getSnapshot() {
+  try {
+    return localStorage.getItem('atmos-theme') !== 'light';
+  } catch {
+    return true;
+  }
+}
+
+// Server render (and hydration) assumes dark, matching the default theme
+function getServerSnapshot() {
+  return true;
+}
 
 export default function ThemeToggle() {
-  const [isDark, setIsDark] = useState(true);
+  const isDark = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
-    const saved = localStorage.getItem('atmos-theme');
-    if (saved === 'light') {
-      setIsDark(false);
-      document.documentElement.classList.add('light');
-    } else {
-      setIsDark(true);
-      document.documentElement.classList.remove('light');
-    }
-  }, []);
+    document.documentElement.classList.toggle('light', !isDark);
+  }, [isDark]);
 
   const toggle = () => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    if (newIsDark) {
-      document.documentElement.classList.remove('light');
-      localStorage.setItem('atmos-theme', 'dark');
-    } else {
-      document.documentElement.classList.add('light');
-      localStorage.setItem('atmos-theme', 'light');
-    }
+    try {
+      localStorage.setItem('atmos-theme', isDark ? 'light' : 'dark');
+    } catch {}
+    listeners.forEach((l) => l());
   };
 
   return (

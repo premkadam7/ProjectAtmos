@@ -238,8 +238,8 @@ function WardDetailPanel({ ward, detail, blame, onClose }) {
 export default function ForecastPage() {
   const [forecastData, setForecastData] = useState(null);
   const [selectedWard, setSelectedWard] = useState(null);
-  const [wardDetail, setWardDetail]     = useState(null);
-  const [blame, setBlame]               = useState(null);
+  const [detailState, setDetailState]   = useState({ wardId: null, data: null });
+  const [blameState, setBlameState]     = useState({ wardId: null, data: null });
   const [search, setSearch]             = useState('');
 
   useEffect(() => {
@@ -248,11 +248,13 @@ export default function ForecastPage() {
 
   useEffect(() => {
     if (!selectedWard) return;
-    setWardDetail(null);
-    setBlame(null);
-    getWardDetail('delhi', selectedWard.ward_id).then(setWardDetail);
-    getBlame('delhi', selectedWard.ward_id).then(setBlame);
+    const wardId = selectedWard.ward_id;
+    getWardDetail('delhi', wardId).then((data) => setDetailState({ wardId, data }));
+    getBlame('delhi', wardId).then((data) => setBlameState({ wardId, data }));
   }, [selectedWard]);
+
+  const wardDetail = detailState.wardId === selectedWard?.ward_id ? detailState.data : null;
+  const blame      = blameState.wardId === selectedWard?.ward_id ? blameState.data : null;
 
   const wards = forecastData?.wards || [];
 

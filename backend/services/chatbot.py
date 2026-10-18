@@ -10,6 +10,9 @@ from dotenv import load_dotenv, find_dotenv
 # Load environment variables
 load_dotenv(find_dotenv())
 
+# Gemini model used for RAG responses (override with GEMINI_MODEL)
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
 # Import LangChain & Gemini
 try:
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -231,7 +234,7 @@ class AtmosChatbotService:
         history = cls.get_history(conversation_id)
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model=GEMINI_MODEL,
             temperature=0.2,
             google_api_key=api_key
         )
@@ -305,7 +308,7 @@ class AtmosChatbotService:
         history = cls.get_history(conversation_id)
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
+            model=GEMINI_MODEL,
             temperature=0.2,
             google_api_key=api_key
         )

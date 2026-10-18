@@ -23,7 +23,8 @@ export default function BlamePage() {
   const [allWards, setAllWards] = useState([]);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState('');
-  const [blameData, setBlameData] = useState(null);
+  const [blameState, setBlameState] = useState({ wardId: null, data: null });
+  const blameData = blameState.wardId === selected?.ward_id ? blameState.data : null;
 
   useEffect(() => {
     getForecast('delhi').then((data) => {
@@ -37,10 +38,9 @@ export default function BlamePage() {
   }, []);
 
   useEffect(() => {
-    if (selected) {
-      setBlameData(null);
-      getBlame('delhi', selected.ward_id).then(setBlameData);
-    }
+    if (!selected) return;
+    const wardId = selected.ward_id;
+    getBlame('delhi', wardId).then((data) => setBlameState({ wardId, data }));
   }, [selected]);
 
   const searchResults = search.length > 0
