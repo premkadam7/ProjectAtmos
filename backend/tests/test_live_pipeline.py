@@ -131,3 +131,76 @@ def test_timeline_endpoint(client):
     data = resp.json()
     assert len(data["timestamps"]) == lp.HORIZON_HOURS
     assert all(len(v) == lp.HORIZON_HOURS for v in data["wards"].values())
+
+
+# ── Freshness (F08) ──────────────────────────────────────────────────────────
+
+def _live_snapshot_observed(hours_ago):
+    snap = dict(lp.build_offline_snapshot())
+    observed = datetime.now(timezone.utc) - pd.Timedelta(hours=hours_ago)
+    snap.update(source="live", observed_at=observed.isoformat(), generated_at=observed.isoformat())
+    return snap
+
+
+def test_freshness_current_then_stale():
+    assert lp.freshness(_live_snapshot_observed(0.5))["status"] == "current"
+    old = lp.freshness(_live_snapshot_observed(5))
+    assert old["status"] == "stale"
+    assert old["data_age_minutes"] >= 5 * 60 - 1
+
+
+def test_offline_sample_is_never_reported_current():
+    assert lp.freshness(lp.build_offline_snapshot())["status"] == "sample"
+
+
+def test_repeated_refresh_failure_keeps_data_but_reports_stale(monkeypatch):
+    snap = _live_snapshot_observed(5)
+    monkeypatch.setattr(lp, "_snapshot", snap)
+    monkeypatch.setattr(lp, "_refresh_status", dict(lp._refresh_status, consecutive_failures=0, last_error=None))
+
+    def boom():
+        raise ConnectionError("upstream down")
+    monkeypatch.setattr(lp, "build_live_snapshot", boom)
+
+    for _ in range(3):
+        assert lp.refresh_live() is False
+
+    current = lp.get_snapshot()
+    assert current is snap
+    assert current["observed_at"] == snap["observed_at"]   # not silently advanced
+    f = lp.freshness(current)
+    assert f["status"] == "stale"
+    assert f["consecutive_refresh_failures"] == 3
+    assert "upstream down" in f["last_refresh_error"]
+
+
+def test_api_reports_freshness(client):
+    data = client.get("/api/forecast/delhi").json()
+    assert data["freshness"]["status"] == "sample"
+
+
+# ── History provenance (F06) ─────────────────────────────────────────────────
+
+def test_changing_calibration_never_rewrites_history(fake_http, monkeypatch):
+    first = lp.build_live_snapshot()
+    real_fetch = lp.fetch_ground_stations
+
+    def halved(token):
+        g = real_fetch(token)
+        g["pm25"] = g["pm25"] * 0.5
+        return g
+    monkeypatch.setattr(lp, "fetch_ground_stations", halved)
+    second = lp.build_live_snapshot()
+
+    # Current values follow the new ground readings...
+    a = {w["ward_name"]: w["current_pm25"] for w in first["wards"]}
+    b = {w["ward_name"]: w["current_pm25"] for w in second["wards"]}
+    assert b["Anand Vihar"] < a["Anand Vihar"] * 0.7
+    # ...but the stored history is the raw model series, unchanged
+    pd.testing.assert_frame_equal(first["history"], second["history"])
+
+
+def test_history_is_labelled_modelled(client):
+    data = client.get("/api/history/delhi?hours=24").json()
+    assert data["series_kind"] == "modelled"
+    assert "not station measurements" in data["series_description"]

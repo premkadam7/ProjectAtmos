@@ -29,9 +29,9 @@ def test_chat_fallback_language(client):
     assert response.status_code == 200
     data = response.json()
     parsed = ChatResponse(**data)
-    # The API returns the requested language but uses English pool
+    # The API returns the requested language but answers in English
     assert parsed.language == "fr"
-    assert "Delhi's average AQI is 215" in parsed.response
+    assert "Delhi's average AQI is" in parsed.response
 
 def test_chat_invalid_json(client):
     # Malformed JSON payload should result in 422 Unprocessable Entity

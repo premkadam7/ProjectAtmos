@@ -3,7 +3,7 @@ import math
 import pandas as pd
 
 from data.ingest import calculate_aqi_from_pm25
-from services.live_pipeline import get_snapshot, model_predict, POLLUTANTS
+from services.live_pipeline import freshness, get_snapshot, model_predict, POLLUTANTS
 
 
 def _pm25_to_aqi(pm25):
@@ -35,6 +35,7 @@ def get_data_source():
         "observed_at": snap["observed_at"],
         "generated_at": snap["generated_at"],
         "ground_stations": snap["ground_stations"],
+        "freshness": freshness(snap),
     }
 
 
@@ -68,8 +69,15 @@ def get_ward_forecast(ward_id: str, hours: int = 72):
     }
 
 
+HISTORY_SERIES_INFO = {
+    "kind": "modelled",
+    "description": "CAMS atmospheric model estimates (via Open-Meteo) at station locations, "
+                   "not station measurements and not calibrated to CPCB readings",
+}
+
+
 def get_history(ward_id: str = None, hours: int = 24 * 30):
-    """Hourly observed pollutant history for one ward, or the city mean when ward_id is None."""
+    """Hourly modelled pollutant history for one ward, or the city mean when ward_id is None."""
     hist = get_snapshot()["history"]
     if ward_id:
         hist = hist[hist["ward_id"] == ward_id]

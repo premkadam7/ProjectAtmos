@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
+import { BASE_URL, getForecast, getTimeline, getHistory, getWardDetail } from '@/lib/api';
 import { getAqiColor, getAqiLabel, SOURCE_INFO } from '@/lib/aqi';
 import Card from '@/components/common/Card';
 import CountUp from '@/components/common/CountUp';
@@ -63,10 +63,17 @@ function formatTime(iso, opts = { hour: 'numeric', minute: '2-digit', hour12: tr
   return new Date(iso).toLocaleString('en-IN', opts);
 }
 
+function formatAge(minutes) {
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 48 * 60) return `${Math.round(minutes / 60)} h`;
+  return `${Math.round(minutes / 1440)} days`;
+}
+
 /* ---------- Data source badge ---------- */
 function DataSourceBadge({ data }) {
   if (!data?.data_source) return null;
-  const info = SOURCE_INFO[data.data_source] || SOURCE_INFO['offline-sample'];
+  const stale = data.freshness?.status === 'stale';
+  const info = stale ? SOURCE_INFO.stale : (SOURCE_INFO[data.data_source] || SOURCE_INFO['offline-sample']);
   const observed = formatTime(data.observed_at, { day: '2-digit', month: 'short', hour: 'numeric', hour12: true });
   return (
     <div className="source-badge" title={data.source_detail} style={{ '--c': info.tone }}>
@@ -379,7 +386,7 @@ function CigaretteCard({ cigarettes, pm25, animOrder = 0 }) {
   );
 }
 
-/* ---------- Pollutants: latest measured values vs CPCB limits ---------- */
+/* ---------- Pollutants: current values vs CPCB limits ---------- */
 // CPCB National Ambient Air Quality Standards (24h, or 8h for CO/O3)
 const POLLUTANTS = [
   { key: 'pm25', name: 'PM2.5', unit: 'µg/m³', limit: 60 },
@@ -390,11 +397,11 @@ const POLLUTANTS = [
   { key: 'o3', name: 'O₃', unit: 'µg/m³', limit: 100 },
 ];
 
-function TopPollutantsCard({ latest, animOrder = 0 }) {
+function TopPollutantsCard({ latest, calibrated, animOrder = 0 }) {
   return (
     <Card
       title="Pollutants vs safe limit"
-      action={<span className="chip-muted">CPCB standard</span>}
+      action={<span className="chip-muted">{calibrated ? 'PM: CPCB-calibrated · gases: CAMS model' : 'CAMS model estimates'}</span>}
       className="stagger-in"
       style={{ flex: 1, animationDelay: `${animOrder * 0.08}s` }}
     >
@@ -421,7 +428,10 @@ function TopPollutantsCard({ latest, animOrder = 0 }) {
               </div>
             );
           })}
-          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bar marker = safe limit (1×). Scale shows up to 3× the limit.</p>
+          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+            Latest hourly value compared with the CPCB 24-hour standard (8-hour for CO and O₃), so this is indicative.
+            Bar marker = limit (1×); scale shows up to 3×.
+          </p>
         </div>
       )}
     </Card>
@@ -492,7 +502,7 @@ function HistoricalCard({ history, animOrder = 0 }) {
   return (
     <Card
       title="Historical air quality"
-      action={<span className="chip-muted">{history?.data_source === 'live' ? 'Ground-calibrated' : 'Measured'}</span>}
+      action={<span className="chip-muted" title={history?.series_description}>Modelled (CAMS)</span>}
       className="stagger-in"
       style={{ animationDelay: `${animOrder * 0.08}s` }}
     >
@@ -530,6 +540,10 @@ function HistoricalCard({ history, animOrder = 0 }) {
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', marginTop: '4px' }}>
               {fullLabel(series[0].date)} — {fullLabel(series[series.length - 1].date)}
               {available < hours && ` · ${Math.round(available / 24)} days available`}
+            </p>
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', marginTop: '2px' }}>
+              Satellite-model (CAMS) estimates at station locations, not station measurements. The current
+              readings above are calibrated to CPCB stations when live, so they can differ.
             </p>
             <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
               <div>
@@ -600,14 +614,29 @@ export default function Home() {
   const [history, setHistory] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState({ wardId: null, data: null });
-  const [error, setError] = useState(false);
+  const [error, setError] = useState(null);
+  const [attempt, setAttempt] = useState(0);
 
-  // Fire all requests at once; each card renders as soon as its data lands
+  // Fire all requests at once; each card renders as soon as its data lands.
+  // Hosted backends can take a while to wake, so retry a few times on failure.
   useEffect(() => {
-    getForecast('delhi').then((d) => (d?.wards?.length ? setData(d) : setError(true))).catch(() => setError(true));
+    let retryTimer;
+    getForecast('delhi')
+      .then((d) => {
+        if (!d?.wards?.length) throw new Error(d?.error || 'The API returned no ward data');
+        setError(null);
+        setData(d);
+      })
+      .catch((err) => {
+        setError(err.message === 'Failed to fetch' || err.name === 'TypeError'
+          ? 'No response (the server is not running, the URL is wrong, or CORS blocked this site)'
+          : err.message);
+        if (attempt < 4) retryTimer = setTimeout(() => setAttempt((a) => a + 1), 3000 * 2 ** attempt);
+      });
     getTimeline('delhi').then(setTimeline).catch(() => {});
     getHistory('delhi', { hours: 720 }).then(setHistory).catch(() => {});
-  }, []);
+    return () => clearTimeout(retryTimer);
+  }, [attempt]);
 
   const wards = useMemo(() => data?.wards ?? [], [data]);
   const worst = useMemo(() => [...wards].sort((a, b) => b.current_aqi - a.current_aqi), [wards]);
@@ -620,18 +649,31 @@ export default function Home() {
   }, [selectedWard]);
 
   const wardDetail = detail.wardId === selectedWard?.ward_id ? detail.data : null;
-  const latest = history?.series?.[history.series.length - 1];
+  // Current PM comes from the per-ward current values (CPCB-calibrated when live);
+  // gases are only available from the CAMS model history.
+  const latestModelled = history?.series?.[history.series.length - 1];
+  const meanOf = (key) => (wards.length ? wards.reduce((s, w) => s + (w[key] ?? 0), 0) / wards.length : null);
+  const currentPm25 = meanOf('current_pm25');
+  const currentPm10 = meanOf('current_pm10');
+  const latest = latestModelled && currentPm25 != null
+    ? { ...latestModelled, pm25: currentPm25, pm10: currentPm10 }
+    : null;
 
-  if (error) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)', flexDirection: 'column', gap: '10px' }}>
-      <p style={{ fontSize: '18px', color: '#ef4444' }}>Couldn&apos;t reach the Atmos API</p>
-      <p>The server may be waking up. Please refresh in a minute.</p>
+  if (error && !data) return (
+    <div className="api-error">
+      <p className="api-error-title">Couldn&apos;t reach the Atmos API</p>
+      <p>{error}</p>
+      <p>
+        Tried <code>{BASE_URL}/api/forecast/delhi</code>
+        {attempt < 4 ? ' · retrying automatically…' : ''}
+      </p>
+      <button className="api-error-retry" onClick={() => setAttempt((a) => a + 1)}>Retry now</button>
     </div>
   );
 
   const cityAqi = data ? Math.round(data.city_avg_aqi) : null;
-  const cityPm25 = latest ? Math.round(latest.pm25) : null;
-  const cityPm10 = latest ? Math.round(latest.pm10) : null;
+  const cityPm25 = currentPm25 != null ? Math.round(currentPm25) : null;
+  const cityPm10 = currentPm10 != null ? Math.round(currentPm10) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -647,6 +689,14 @@ export default function Home() {
         </div>
         <DataSourceBadge data={data} />
       </div>
+
+      {data?.freshness?.status === 'stale' && (
+        <div className="notice">
+          Live updates are failing, so this data is {formatAge(data.freshness.data_age_minutes)} old
+          (observed {formatTime(data.observed_at, { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true })}).
+          Current conditions may differ.
+        </div>
+      )}
 
       {data?.data_source === 'offline-sample' && (
         <div className="notice">
@@ -677,7 +727,7 @@ export default function Home() {
         {cityPm25 != null ? (
           <CigaretteCard cigarettes={(cityPm25 / 22).toFixed(1)} pm25={cityPm25} animOrder={2} />
         ) : <Skeleton height={340} style={{ flex: 1 }} />}
-        <TopPollutantsCard latest={latest} animOrder={3} />
+        <TopPollutantsCard latest={latest} calibrated={data?.data_source === 'live'} animOrder={3} />
       </div>
 
       <HistoricalCard history={history} animOrder={4} />

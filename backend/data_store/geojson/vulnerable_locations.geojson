@@ -14,7 +14,9 @@
         "name": "DELHI CANTT CHARGE 1 Academy",
         "type": "school",
         "ward_id": "CANT_1",
-        "ward_name": "DELHI CANTT CHARGE 1"
+        "ward_name": "DELHI CANTT CHARGE 1",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -30,7 +32,9 @@
         "name": "DELHI CANTT CHARGE 1 Nursing Home",
         "type": "hospital",
         "ward_id": "CANT_1",
-        "ward_name": "DELHI CANTT CHARGE 1"
+        "ward_name": "DELHI CANTT CHARGE 1",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -46,7 +50,9 @@
         "name": "DELHI CANTT CHARGE 1 Senior Citizen Home",
         "type": "elderly_care",
         "ward_id": "CANT_1",
-        "ward_name": "DELHI CANTT CHARGE 1"
+        "ward_name": "DELHI CANTT CHARGE 1",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -62,7 +68,9 @@
         "name": "DELHI CANTT CHARGE 2 International School",
         "type": "school",
         "ward_id": "CANT_2",
-        "ward_name": "DELHI CANTT CHARGE 2"
+        "ward_name": "DELHI CANTT CHARGE 2",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -78,7 +86,9 @@
         "name": "DELHI CANTT CHARGE 2 Super Speciality Hospital",
         "type": "hospital",
         "ward_id": "CANT_2",
-        "ward_name": "DELHI CANTT CHARGE 2"
+        "ward_name": "DELHI CANTT CHARGE 2",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -94,7 +104,9 @@
         "name": "DELHI CANTT CHARGE 2 Graceful Living Elderly Care",
         "type": "elderly_care",
         "ward_id": "CANT_2",
-        "ward_name": "DELHI CANTT CHARGE 2"
+        "ward_name": "DELHI CANTT CHARGE 2",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -110,7 +122,9 @@
         "name": "DELHI CANTT CHARGE 4 Model School",
         "type": "school",
         "ward_id": "CANT_4",
-        "ward_name": "DELHI CANTT CHARGE 4"
+        "ward_name": "DELHI CANTT CHARGE 4",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -126,7 +140,9 @@
         "name": "DELHI CANTT CHARGE 4 Nursing Home",
         "type": "hospital",
         "ward_id": "CANT_4",
-        "ward_name": "DELHI CANTT CHARGE 4"
+        "ward_name": "DELHI CANTT CHARGE 4",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -142,7 +158,9 @@
         "name": "DELHI CANTT CHARGE 4 Sunset Retreat",
         "type": "elderly_care",
         "ward_id": "CANT_4",
-        "ward_name": "DELHI CANTT CHARGE 4"
+        "ward_name": "DELHI CANTT CHARGE 4",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -158,7 +176,9 @@
         "name": "DELHI CANTT CHARGE 5 Academy",
         "type": "school",
         "ward_id": "CANT_5",
-        "ward_name": "DELHI CANTT CHARGE 5"
+        "ward_name": "DELHI CANTT CHARGE 5",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -174,7 +194,9 @@
         "name": "DELHI CANTT CHARGE 5 Super Speciality Hospital",
         "type": "hospital",
         "ward_id": "CANT_5",
-        "ward_name": "DELHI CANTT CHARGE 5"
+        "ward_name": "DELHI CANTT CHARGE 5",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -190,7 +212,9 @@
         "name": "DELHI CANTT CHARGE 5 Sunset Retreat",
         "type": "elderly_care",
         "ward_id": "CANT_5",
-        "ward_name": "DELHI CANTT CHARGE 5"
+        "ward_name": "DELHI CANTT CHARGE 5",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -206,7 +230,9 @@
         "name": "DELHI CANTT CHARGE 6 Academy",
         "type": "school",
         "ward_id": "CANT_6",
-        "ward_name": "DELHI CANTT CHARGE 6"
+        "ward_name": "DELHI CANTT CHARGE 6",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -222,7 +248,9 @@
         "name": "DELHI CANTT CHARGE 6 Health Center",
         "type": "hospital",
         "ward_id": "CANT_6",
-        "ward_name": "DELHI CANTT CHARGE 6"
+        "ward_name": "DELHI CANTT CHARGE 6",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -238,7 +266,9 @@
         "name": "DELHI CANTT CHARGE 6 Hope Assisted Living",
         "type": "elderly_care",
         "ward_id": "CANT_6",
-        "ward_name": "DELHI CANTT CHARGE 6"
+        "ward_name": "DELHI CANTT CHARGE 6",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -254,7 +284,9 @@
         "name": "DELHI CANTT CHARGE 7 Academy",
         "type": "school",
         "ward_id": "CANT_7",
-        "ward_name": "DELHI CANTT CHARGE 7"
+        "ward_name": "DELHI CANTT CHARGE 7",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -270,7 +302,9 @@
         "name": "DELHI CANTT CHARGE 7 Apex Clinic",
         "type": "hospital",
         "ward_id": "CANT_7",
-        "ward_name": "DELHI CANTT CHARGE 7"
+        "ward_name": "DELHI CANTT CHARGE 7",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -286,7 +320,9 @@
         "name": "DELHI CANTT CHARGE 7 Sunset Retreat",
         "type": "elderly_care",
         "ward_id": "CANT_7",
-        "ward_name": "DELHI CANTT CHARGE 7"
+        "ward_name": "DELHI CANTT CHARGE 7",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -302,7 +338,9 @@
         "name": "DELHI CANTT CHARGE 8 Model School",
         "type": "school",
         "ward_id": "CANT_8",
-        "ward_name": "DELHI CANTT CHARGE 8"
+        "ward_name": "DELHI CANTT CHARGE 8",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -318,7 +356,9 @@
         "name": "DELHI CANTT CHARGE 8 Health Center",
         "type": "hospital",
         "ward_id": "CANT_8",
-        "ward_name": "DELHI CANTT CHARGE 8"
+        "ward_name": "DELHI CANTT CHARGE 8",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -334,7 +374,9 @@
         "name": "DELHI CANTT CHARGE 8 Hope Assisted Living",
         "type": "elderly_care",
         "ward_id": "CANT_8",
-        "ward_name": "DELHI CANTT CHARGE 8"
+        "ward_name": "DELHI CANTT CHARGE 8",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -350,7 +392,9 @@
         "name": "DELHI CANTT CHARGE 3 Convent School",
         "type": "school",
         "ward_id": "CANT_3",
-        "ward_name": "DELHI CANTT CHARGE 3"
+        "ward_name": "DELHI CANTT CHARGE 3",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -366,7 +410,9 @@
         "name": "DELHI CANTT CHARGE 3 Apex Clinic",
         "type": "hospital",
         "ward_id": "CANT_3",
-        "ward_name": "DELHI CANTT CHARGE 3"
+        "ward_name": "DELHI CANTT CHARGE 3",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -382,7 +428,9 @@
         "name": "DELHI CANTT CHARGE 3 Senior Citizen Home",
         "type": "elderly_care",
         "ward_id": "CANT_3",
-        "ward_name": "DELHI CANTT CHARGE 3"
+        "ward_name": "DELHI CANTT CHARGE 3",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -398,7 +446,9 @@
         "name": "NDMC CHARGE 1 Model School",
         "type": "school",
         "ward_id": "NDMC_1",
-        "ward_name": "NDMC CHARGE 1"
+        "ward_name": "NDMC CHARGE 1",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -414,7 +464,9 @@
         "name": "NDMC CHARGE 1 Health Center",
         "type": "hospital",
         "ward_id": "NDMC_1",
-        "ward_name": "NDMC CHARGE 1"
+        "ward_name": "NDMC CHARGE 1",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -430,7 +482,9 @@
         "name": "NDMC CHARGE 1 Senior Citizen Home",
         "type": "elderly_care",
         "ward_id": "NDMC_1",
-        "ward_name": "NDMC CHARGE 1"
+        "ward_name": "NDMC CHARGE 1",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -446,7 +500,9 @@
         "name": "NDMC CHARGE 2 Academy",
         "type": "school",
         "ward_id": "NDMC_2",
-        "ward_name": "NDMC CHARGE 2"
+        "ward_name": "NDMC CHARGE 2",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -462,7 +518,9 @@
         "name": "NDMC CHARGE 2 Health Center",
         "type": "hospital",
         "ward_id": "NDMC_2",
-        "ward_name": "NDMC CHARGE 2"
+        "ward_name": "NDMC CHARGE 2",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -478,7 +536,9 @@
         "name": "NDMC CHARGE 2 Senior Citizen Home",
         "type": "elderly_care",
         "ward_id": "89",
-        "ward_name": "PAHAR GANJ"
+        "ward_name": "PAHAR GANJ",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -494,7 +554,9 @@
         "name": "NDMC CHARGE 3 Public School",
         "type": "school",
         "ward_id": "NDMC_3",
-        "ward_name": "NDMC CHARGE 3"
+        "ward_name": "NDMC CHARGE 3",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -510,7 +572,9 @@
         "name": "NDMC CHARGE 3 Nursing Home",
         "type": "hospital",
         "ward_id": "NDMC_3",
-        "ward_name": "NDMC CHARGE 3"
+        "ward_name": "NDMC CHARGE 3",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -526,7 +590,9 @@
         "name": "NDMC CHARGE 3 Nightingale Care",
         "type": "elderly_care",
         "ward_id": "NDMC_3",
-        "ward_name": "NDMC CHARGE 3"
+        "ward_name": "NDMC CHARGE 3",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -542,7 +608,9 @@
         "name": "NDMC CHARGE 4 Public School",
         "type": "school",
         "ward_id": "NDMC_4",
-        "ward_name": "NDMC CHARGE 4"
+        "ward_name": "NDMC CHARGE 4",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -558,7 +626,9 @@
         "name": "NDMC CHARGE 4 Nursing Home",
         "type": "hospital",
         "ward_id": "NDMC_4",
-        "ward_name": "NDMC CHARGE 4"
+        "ward_name": "NDMC CHARGE 4",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -574,7 +644,9 @@
         "name": "NDMC CHARGE 4 Hope Assisted Living",
         "type": "elderly_care",
         "ward_id": "NDMC_4",
-        "ward_name": "NDMC CHARGE 4"
+        "ward_name": "NDMC CHARGE 4",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -590,7 +662,9 @@
         "name": "NDMC CHARGE 5 Convent School",
         "type": "school",
         "ward_id": "NDMC_5",
-        "ward_name": "NDMC CHARGE 5"
+        "ward_name": "NDMC CHARGE 5",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -606,7 +680,9 @@
         "name": "NDMC CHARGE 5 Health Center",
         "type": "hospital",
         "ward_id": "NDMC_5",
-        "ward_name": "NDMC CHARGE 5"
+        "ward_name": "NDMC CHARGE 5",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -622,7 +698,9 @@
         "name": "NDMC CHARGE 5 Graceful Living Elderly Care",
         "type": "elderly_care",
         "ward_id": "NDMC_5",
-        "ward_name": "NDMC CHARGE 5"
+        "ward_name": "NDMC CHARGE 5",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -638,7 +716,9 @@
         "name": "NDMC CHARGE 7 Convent School",
         "type": "school",
         "ward_id": "NDMC_7",
-        "ward_name": "NDMC CHARGE 7"
+        "ward_name": "NDMC CHARGE 7",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -654,7 +734,9 @@
         "name": "NDMC CHARGE 7 Super Speciality Hospital",
         "type": "hospital",
         "ward_id": "NDMC_7",
-        "ward_name": "NDMC CHARGE 7"
+        "ward_name": "NDMC CHARGE 7",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -670,7 +752,9 @@
         "name": "NDMC CHARGE 7 Hope Assisted Living",
         "type": "elderly_care",
         "ward_id": "NDMC_7",
-        "ward_name": "NDMC CHARGE 7"
+        "ward_name": "NDMC CHARGE 7",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -686,7 +770,9 @@
         "name": "NDMC CHARGE 8 International School",
         "type": "school",
         "ward_id": "NDMC_8",
-        "ward_name": "NDMC CHARGE 8"
+        "ward_name": "NDMC CHARGE 8",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -702,7 +788,9 @@
         "name": "NDMC CHARGE 8 Health Center",
         "type": "hospital",
         "ward_id": "NDMC_8",
-        "ward_name": "NDMC CHARGE 8"
+        "ward_name": "NDMC CHARGE 8",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -718,7 +806,9 @@
         "name": "NDMC CHARGE 8 Graceful Living Elderly Care",
         "type": "elderly_care",
         "ward_id": "NDMC_8",
-        "ward_name": "NDMC CHARGE 8"
+        "ward_name": "NDMC CHARGE 8",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -734,7 +824,9 @@
         "name": "NDMC CHARGE 9 Public School",
         "type": "school",
         "ward_id": "NDMC_9",
-        "ward_name": "NDMC CHARGE 9"
+        "ward_name": "NDMC CHARGE 9",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -750,7 +842,9 @@
         "name": "NDMC CHARGE 9 General Hospital",
         "type": "hospital",
         "ward_id": "NDMC_9",
-        "ward_name": "NDMC CHARGE 9"
+        "ward_name": "NDMC CHARGE 9",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -766,7 +860,9 @@
         "name": "NDMC CHARGE 9 Senior Citizen Home",
         "type": "elderly_care",
         "ward_id": "NDMC_9",
-        "ward_name": "NDMC CHARGE 9"
+        "ward_name": "NDMC CHARGE 9",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -782,7 +878,9 @@
         "name": "NDMC CHARGE 6 Academy",
         "type": "school",
         "ward_id": "NDMC_6",
-        "ward_name": "NDMC CHARGE 6"
+        "ward_name": "NDMC CHARGE 6",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -798,7 +896,9 @@
         "name": "NDMC CHARGE 6 General Hospital",
         "type": "hospital",
         "ward_id": "NDMC_6",
-        "ward_name": "NDMC CHARGE 6"
+        "ward_name": "NDMC CHARGE 6",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -814,7 +914,9 @@
         "name": "NDMC CHARGE 6 Nightingale Care",
         "type": "elderly_care",
         "ward_id": "NDMC_6",
-        "ward_name": "NDMC CHARGE 6"
+        "ward_name": "NDMC CHARGE 6",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -830,7 +932,9 @@
         "name": "CHANDNI CHOWK Convent School",
         "type": "school",
         "ward_id": "80",
-        "ward_name": "CHANDNI CHOWK"
+        "ward_name": "CHANDNI CHOWK",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -846,7 +950,9 @@
         "name": "CHANDNI CHOWK Apex Clinic",
         "type": "hospital",
         "ward_id": "80",
-        "ward_name": "CHANDNI CHOWK"
+        "ward_name": "CHANDNI CHOWK",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -862,7 +968,9 @@
         "name": "CHANDNI CHOWK Hope Assisted Living",
         "type": "elderly_care",
         "ward_id": "80",
-        "ward_name": "CHANDNI CHOWK"
+        "ward_name": "CHANDNI CHOWK",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -878,7 +986,9 @@
         "name": "MINTO ROAD International School",
         "type": "school",
         "ward_id": "81",
-        "ward_name": "MINTO ROAD"
+        "ward_name": "MINTO ROAD",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -894,7 +1004,9 @@
         "name": "MINTO ROAD Health Center",
         "type": "hospital",
         "ward_id": "81",
-        "ward_name": "MINTO ROAD"
+        "ward_name": "MINTO ROAD",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -910,7 +1022,9 @@
         "name": "MINTO ROAD Hope Assisted Living",
         "type": "elderly_care",
         "ward_id": "81",
-        "ward_name": "MINTO ROAD"
+        "ward_name": "MINTO ROAD",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -926,7 +1040,9 @@
         "name": "KUCHA PANDIT International School",
         "type": "school",
         "ward_id": "82",
-        "ward_name": "KUCHA PANDIT"
+        "ward_name": "KUCHA PANDIT",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -942,7 +1058,9 @@
         "name": "KUCHA PANDIT Nursing Home",
         "type": "hospital",
         "ward_id": "NDMC_2",
-        "ward_name": "NDMC CHARGE 2"
+        "ward_name": "NDMC CHARGE 2",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     },
     {
@@ -958,8 +1076,14 @@
         "name": "KUCHA PANDIT Nightingale Care",
         "type": "elderly_care",
         "ward_id": "82",
-        "ward_name": "KUCHA PANDIT"
+        "ward_name": "KUCHA PANDIT",
+        "source": "synthetic-demo",
+        "synthetic": true
       }
     }
-  ]
+  ],
+  "metadata": {
+    "source": "synthetic-demo",
+    "note": "Placeholder records generated by data/fetch_vulnerable.py when OpenStreetMap was unreachable. They are not real facilities and are excluded from impact counts."
+  }
 }

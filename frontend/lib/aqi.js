@@ -105,4 +105,5 @@ export const SOURCE_INFO = {
   live: { label: 'Live', tone: '#22c55e' },
   'model-only': { label: 'Live (model only)', tone: '#eab308' },
   'offline-sample': { label: 'Offline sample', tone: '#f97316' },
+  stale: { label: 'Stale data', tone: '#f97316' },
 };

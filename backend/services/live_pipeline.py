@@ -72,6 +72,8 @@ LIVE_ENABLED = os.getenv("ATMOS_LIVE", "1") != "0"
 REFRESH_SECONDS = int(os.getenv("ATMOS_REFRESH_MINUTES", "30")) * 60
 FIRST_LIVE_WAIT_SECONDS = 20
 MAX_SNAPSHOT_AGE_HOURS = 6
+# Live observations older than this are reported as stale (refreshes failing)
+STALE_AFTER_MINUTES = int(os.getenv("ATMOS_STALE_AFTER_MINUTES", "120"))
 
 # US EPA AQI breakpoints (concentration low/high, index low/high); WAQI reports
 # station sub-indices on this scale, so they are inverted back to µg/m³.
@@ -393,13 +395,12 @@ def assemble_snapshot(raw, stations, now, calib, source, source_detail, ground_c
             "hourly": hourly,
         })
 
-    # History (observed side only), calibrated to ground level for PM
+    # History up to now: CAMS model estimates exactly as received. Today's
+    # calibration ratio is not applied backwards, so past values never change
+    # with later calibrations and are never presented as measurements.
     hist = raw[raw["timestamp"] <= now][["timestamp", "station", *POLLUTANTS]].copy()
-    hist = hist.merge(calib[["ratio_pm25", "ratio_pm10"]], left_on="station", right_index=True)
-    hist["pm25"] = hist["pm25"] * hist["ratio_pm25"]
-    hist["pm10"] = hist["pm10"] * hist["ratio_pm10"]
     hist["aqi"] = hist["pm25"].apply(calculate_aqi_from_pm25)
-    hist = hist.drop(columns=["ratio_pm25", "ratio_pm10"]).merge(
+    hist = hist.merge(
         stations[["station", "ward_id"]], on="station"
     )
 
@@ -484,6 +485,12 @@ _version = 0
 _lock = threading.Lock()
 _first_live_done = threading.Event()
 _refresh_thread = None
+_refresh_status = {
+    "last_attempt": None,
+    "last_success": None,
+    "last_error": None,
+    "consecutive_failures": 0,
+}
 
 
 def _set_snapshot(snap):
@@ -506,9 +513,14 @@ def _load_persisted():
 
 
 def refresh_live():
+    attempted = datetime.now(timezone.utc).isoformat()
     try:
         snap = build_live_snapshot()
         _set_snapshot(snap)
+        with _lock:
+            _refresh_status.update(
+                last_attempt=attempted, last_success=attempted, last_error=None, consecutive_failures=0,
+            )
         try:
             with open(SNAPSHOT_PATH, "wb") as f:
                 pickle.dump(snap, f)
@@ -518,6 +530,11 @@ def refresh_live():
         return True
     except Exception as e:
         logger.warning("Live refresh failed: %s", e)
+        # Keep serving the previous snapshot; freshness() reports how old it is
+        with _lock:
+            _refresh_status["last_attempt"] = attempted
+            _refresh_status["last_error"] = f"{type(e).__name__}: {e}"[:300]
+            _refresh_status["consecutive_failures"] += 1
         return False
     finally:
         _first_live_done.set()
@@ -552,6 +569,33 @@ def get_snapshot():
             _snapshot = build_offline_snapshot()
             _version += 1
         return _snapshot
+
+
+def freshness(snap, now=None):
+    """How current a snapshot's data is, computed at read time.
+
+    status is "sample" for the bundled offline data, otherwise "current" or
+    "stale" depending on the age of the observations it was built from.
+    """
+    now = now or datetime.now(timezone.utc)
+    observed = datetime.fromisoformat(snap["observed_at"])
+    age_minutes = int((now - observed).total_seconds() // 60)
+    if snap["source"] == "offline-sample":
+        status = "sample"
+    elif age_minutes > STALE_AFTER_MINUTES:
+        status = "stale"
+    else:
+        status = "current"
+    with _lock:
+        refresh = dict(_refresh_status)
+    return {
+        "status": status,
+        "data_age_minutes": age_minutes,
+        "stale_after_minutes": STALE_AFTER_MINUTES,
+        "last_successful_refresh": refresh["last_success"],
+        "last_refresh_error": refresh["last_error"],
+        "consecutive_refresh_failures": refresh["consecutive_failures"],
+    }
 
 
 def snapshot_version():

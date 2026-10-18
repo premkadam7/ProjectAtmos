@@ -4,6 +4,9 @@ import uuid
 import json
 import difflib
 import asyncio
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional, AsyncGenerator, Dict, List
 from dotenv import load_dotenv, find_dotenv
 
@@ -23,54 +26,175 @@ except ImportError:
     LANGCHAIN_AVAILABLE = False
 
 # Import metrics engines for dynamic context
-from models.forecaster import get_city_overview, get_ward_forecast, get_ward_blame
+from models.forecaster import get_city_hourly, get_city_overview, get_data_source, get_ward_forecast, get_ward_blame
 from routers.enforce import get_enforcement_tickets
 
-# Original Mock Responses for testing/fallback
-RESPONSES = {
-    "en": {
-        "default": "Based on current data, Delhi's average AQI is 215 (Poor). The worst affected area is Anand Vihar (AQI 310) due to industrial emissions. I recommend limiting outdoor activity, especially for children and the elderly. Would you like details about a specific ward?",
-        "rohini": "Rohini Sector 7 currently has an AQI of 245 (Poor). The primary contributors are traffic congestion (35%) and unfavorable wind conditions (30%). The forecast shows worsening conditions over the next 24 hours (expected AQI: 285). I'd recommend staying indoors and using an air purifier if available.",
-        "dwarka": "Dwarka Sector 10 has a moderate AQI of 185. Good news — the forecast shows improvement over the next 48 hours, dropping to around 150. The main factor is weather (low wind speed trapping pollutants). Outdoor exercise is okay in the early morning when AQI tends to be lower.",
-        "jogging": "Based on tomorrow's forecast, I'd avoid jogging outdoors in most parts of Delhi. The safest areas will be Vasant Kunj (forecast AQI: 135) and Dwarka (forecast AQI: 160). If you must exercise outdoors, early morning (5-7 AM) typically has the best air quality. That's equivalent to smoking about 2-3 cigarettes worth of PM2.5 exposure.",
-        "worst": "The worst areas in Delhi right now are:\n1. Anand Vihar — AQI 310 (Severe) — Industrial emissions\n2. Rohini Sector 7 — AQI 245 (Poor) — Traffic + wind\n3. ITO — AQI 198 (Moderate) — Traffic congestion\n\nI strongly advise avoiding outdoor activity in Anand Vihar — breathing that air is equivalent to smoking 7.1 cigarettes today.",
-    },
-    "hi": {
-        "default": "वर्तमान डेटा के अनुसार, दिल्ली का औसत AQI 215 (खराब) है। सबसे प्रभावित क्षेत्र आनंद विहार है (AQI 310) जो औद्योगिक उत्सर्जन के कारण है। मैं बाहरी गतिविधियों को सीमित करने की सलाह दूंगा, विशेषकर बच्चों और बुजुर्गों के लिए।",
-        "rohini": "रोहिणी सेक्टर 7 का वर्तमान AQI 245 (खराब) है। मुख्य कारण ट्रैफिक (35%) और प्रतिकूल हवा की स्थिति (30%) है। अगले 24 घंटों में हालात और बिगड़ने की संभावना है। घर के अंदर रहने की सलाह है।",
-        "dwarka": "द्वारका सेक्टर 10 का AQI 185 (मध्यम) है। अच्छी खबर — अगले 48 घंटों में सुधार की उम्मीद है। सुबह जल्दी बाहर जाना सुरक्षित रहेगा।",
-    },
+IST = ZoneInfo("Asia/Kolkata")
+
+BAND_NAMES = {
+    "en": ["Good", "Satisfactory", "Moderate", "Poor", "Very Poor", "Severe"],
+    "hi": ["अच्छा", "संतोषजनक", "मध्यम", "खराब", "बहुत खराब", "गंभीर"],
 }
+BAND_LIMITS = [50, 100, 200, 300, 400]
 
-def _match_response(message: str, language: str) -> str:
+
+def _band(aqi: float, lang: str) -> str:
+    names = BAND_NAMES.get(lang, BAND_NAMES["en"])
+    for i, limit in enumerate(BAND_LIMITS):
+        if aqi <= limit:
+            return names[i]
+    return names[-1]
+
+
+def _ist(iso: str) -> str:
+    return datetime.fromisoformat(iso).astimezone(IST).strftime("%d %b %Y, %I:%M %p IST")
+
+
+# Words that appear in ward ids/names but don't identify a ward in a question
+_GENERIC_TOKENS = {"delhi", "ward", "wards", "charge", "sector", "road", "nagar", "vihar", "today", "average",
+                   "quality", "tomorrow", "forecast", "pollution", "where", "which", "what", "about"}
+
+
+def _match_wards(query: str, overview: list) -> list:
+    """Wards whose name or id appears (exactly or fuzzily) in the query."""
+    matched = []
+    query_lower = query.lower()
+    tokens = [t for t in re.findall(r"\w+", query_lower) if t not in _GENERIC_TOKENS]
+    for w in overview:
+        name_lower = w["ward_name"].lower()
+        id_lower = w["ward_id"].lower()
+        id_clean = id_lower.replace("_", " ")
+        if (name_lower in query_lower or id_lower in query_lower or id_clean in query_lower or
+                query_lower in name_lower or query_lower in id_lower or query_lower in id_clean):
+            matched.append(w)
+            continue
+        for token in tokens:
+            if len(token) < 4:
+                continue
+            if token in name_lower or token in id_lower or token in id_clean:
+                matched.append(w)
+                break
+            ratio_name = difflib.SequenceMatcher(None, token, name_lower).ratio()
+            ratio_id = difflib.SequenceMatcher(None, token, id_clean).ratio()
+            if max(ratio_name, ratio_id) > 0.8:
+                matched.append(w)
+                break
+    return matched
+
+
+def _provenance(meta: dict) -> str:
+    """One block stating where the numbers come from and how current they are."""
+    fresh = meta["freshness"]
+    lines = [
+        f"Data source: {meta['source_detail']} (status: {meta['data_source']}).",
+        f"Observed at: {_ist(meta['observed_at'])}; freshness: {fresh['status']}"
+        f" (data age {fresh['data_age_minutes']} minutes).",
+    ]
+    if fresh["status"] == "sample":
+        lines.append("WARNING: this is bundled sample data from the past, NOT current conditions.")
+    elif fresh["status"] == "stale":
+        lines.append("WARNING: live updates are failing; these values are out of date.")
+    return "\n".join(lines)
+
+
+def _sources(meta: dict) -> list:
+    return [f"Atmos forecast snapshot: {meta['source_detail']} ({meta['freshness']['status']})"]
+
+
+def grounded_reply(message: str, language: str, reason: str) -> str:
+    """Deterministic answer built only from the current snapshot (no LLM).
+
+    Used when Gemini is not configured or fails, so the assistant never
+    presents invented readings as current facts.
+    """
+    lang = "hi" if language == "hi" else "en"
+    overview = get_city_overview()
+    meta = get_data_source()
+    fresh = meta["freshness"]
+    if not overview:
+        return ("अभी वायु गुणवत्ता डेटा उपलब्ध नहीं है।" if lang == "hi"
+                else "Air-quality data is not available right now.")
+
     msg = message.lower()
-    pool = RESPONSES.get(language, RESPONSES["en"])
+    lines = []
+    matched = _match_wards(message, overview)[:3]
+    if matched:
+        for w in matched:
+            if lang == "hi":
+                lines.append(
+                    f"{w['ward_name']}: वर्तमान AQI {w['current_aqi']:.0f} ({_band(w['current_aqi'], lang)}); "
+                    f"24 घंटे बाद अनुमानित AQI {w['forecast_aqi_24h']:.0f} ({_band(w['forecast_aqi_24h'], lang)})।"
+                )
+            else:
+                lines.append(
+                    f"{w['ward_name']}: current AQI {w['current_aqi']:.0f} ({_band(w['current_aqi'], lang)}); "
+                    f"predicted AQI in 24 hours {w['forecast_aqi_24h']:.0f} ({_band(w['forecast_aqi_24h'], lang)})."
+                )
+    elif any(k in msg for k in ("jog", "exercise", "run", "outdoor", "जॉगिंग", "दौड़", "व्यायाम")):
+        timeline = get_city_hourly()
+        ids = list(timeline["wards"])
+        hourly = [sum(timeline["wards"][i][h] for i in ids) / len(ids) for h in range(min(24, len(timeline["timestamps"])))]
+        lo = min(range(len(hourly)), key=hourly.__getitem__)
+        hi_ = max(range(len(hourly)), key=hourly.__getitem__)
+        if lang == "hi":
+            lines.append(
+                f"अगले 24 घंटों में शहर का सबसे कम अनुमानित औसत AQI {hourly[lo]:.0f} ({_band(hourly[lo], lang)}) "
+                f"लगभग {_ist(timeline['timestamps'][lo])} पर, और सबसे अधिक {hourly[hi_]:.0f} "
+                f"लगभग {_ist(timeline['timestamps'][hi_])} पर है। यह मॉडल का पूर्वानुमान है, गारंटी नहीं।"
+            )
+        else:
+            lines.append(
+                f"Over the next 24 hours the lowest predicted city-average AQI is {hourly[lo]:.0f} "
+                f"({_band(hourly[lo], lang)}) around {_ist(timeline['timestamps'][lo])}, and the highest is "
+                f"{hourly[hi_]:.0f} around {_ist(timeline['timestamps'][hi_])}. This is a model forecast, not a guarantee."
+            )
+    else:
+        avg = sum(w["current_aqi"] for w in overview) / len(overview)
+        ranked = sorted(overview, key=lambda w: w["current_aqi"], reverse=True)
+        top = ", ".join(f"{w['ward_name']} ({w['current_aqi']:.0f})" for w in ranked[:3])
+        best = ranked[-1]
+        if lang == "hi":
+            lines.append(f"दिल्ली का औसत AQI {avg:.0f} ({_band(avg, lang)}) है।")
+            lines.append(f"सबसे अधिक AQI: {top}। सबसे कम: {best['ward_name']} ({best['current_aqi']:.0f})।")
+        else:
+            lines.append(f"Delhi's average AQI is {avg:.0f} ({_band(avg, lang)}).")
+            lines.append(f"Highest AQI: {top}. Lowest: {best['ward_name']} ({best['current_aqi']:.0f}).")
 
-    if "rohini" in msg or "रोहिणी" in msg:
-        return pool.get("rohini", pool["default"])
-    if "dwarka" in msg or "द्वारका" in msg:
-        return pool.get("dwarka", pool["default"])
-    if any(k in msg for k in ("jog", "exercise", "run", "जॉगिंग", "दौड़ना")):
-        return pool.get("jogging", pool["default"])
-    if any(k in msg for k in ("worst", "avoid", "kharab", "सबसे खराब", "खराब")):
-        return pool.get("worst", pool["default"])
-    return pool["default"]
+    observed = _ist(meta["observed_at"])
+    if lang == "hi":
+        head = ("AI सहायक कॉन्फ़िगर नहीं है; यह डेटा का स्वचालित सारांश है।" if reason == "not_configured"
+                else "AI सहायक अभी उपलब्ध नहीं है; यह डेटा का स्वचालित सारांश है।")
+        tail = f"स्रोत: {meta['source_detail']}; अवलोकन समय {observed}।"
+        if fresh["status"] == "sample":
+            tail += " ध्यान दें: यह पुराना नमूना डेटा है, वर्तमान स्थिति नहीं।"
+        elif fresh["status"] == "stale":
+            tail += f" ध्यान दें: लाइव अपडेट विफल हो रहे हैं; डेटा {fresh['data_age_minutes'] // 60} घंटे पुराना है।"
+    else:
+        head = ("Automated data summary (the AI assistant is not configured)." if reason == "not_configured"
+                else "The AI assistant is unavailable right now. Automated data summary:")
+        tail = f"Source: {meta['source_detail']}; observed {observed}."
+        if fresh["status"] == "sample":
+            tail += " Note: this is past sample data, not current conditions."
+        elif fresh["status"] == "stale":
+            tail += f" Note: live updates are failing; this data is {fresh['data_age_minutes'] // 60} hours old."
+    return "\n".join([head, *lines, tail])
+
 
 def build_context_payload(query: str) -> str:
     overview = get_city_overview()
-    
+    meta = get_data_source()
+
     if overview:
         city_avg_aqi = sum(w["current_aqi"] for w in overview) / len(overview)
         worst_ward = max(overview, key=lambda w: w["current_aqi"])
         best_ward = min(overview, key=lambda w: w["current_aqi"])
-        
         overview_text = (
             f"Delhi City Average AQI: {city_avg_aqi:.1f}\n"
             f"Worst Affected Ward: {worst_ward['ward_name']} (AQI: {worst_ward['current_aqi']:.1f})\n"
             f"Best Air Quality Ward: {best_ward['ward_name']} (AQI: {best_ward['current_aqi']:.1f})\n"
         )
     else:
-        overview_text = "Delhi City Average AQI: 215.0\nWorst Affected Ward: Anand Vihar (AQI: 310.0)\nBest Air Quality Ward: Vasant Kunj (AQI: 135.0)\n"
+        overview_text = "No forecast data is available.\n"
 
     try:
         tickets_resp = get_enforcement_tickets("delhi", source=None)
@@ -80,60 +204,33 @@ def build_context_payload(query: str) -> str:
             tickets_text += f"- Ticket {t['ticket_id']} for {t['ward_name']}: Urgency: {t['urgency']}, Current AQI: {t['current_aqi']}, Recommended Action: {t['recommended_action']}\n"
     except Exception:
         tickets_text = ""
-        
+
     if not tickets_text:
         tickets_text = "No active enforcement tickets.\n"
 
-    # Fuzzy-match wards
     matched_wards_info = []
-    query_lower = query.lower()
-    if overview:
-        for w in overview:
-            name_lower = w["ward_name"].lower()
-            id_lower = w["ward_id"].lower()
-            id_clean = id_lower.replace("_", " ")
-            
-            is_matched = False
-            # Substring match (either query contains ward name/id, or ward name/id contains query)
-            if (name_lower in query_lower or id_lower in query_lower or id_clean in query_lower or
-                query_lower in name_lower or query_lower in id_lower or query_lower in id_clean):
-                is_matched = True
-            else:
-                # Token fuzzy and substring match
-                import re
-                tokens = re.findall(r'\w+', query_lower)
-                for token in tokens:
-                    if len(token) < 4:
-                        continue
-                    if token in name_lower or token in id_lower or token in id_clean:
-                        is_matched = True
-                        break
-                    ratio_name = difflib.SequenceMatcher(None, token, name_lower).ratio()
-                    ratio_id = difflib.SequenceMatcher(None, token, id_clean).ratio()
-                    if max(ratio_name, ratio_id) > 0.8:
-                        is_matched = True
-                        break
-                        
-            if is_matched:
-                ward_id = w["ward_id"]
-                forecast = get_ward_forecast(ward_id, hours=24)
-                blame = get_ward_blame(ward_id)
-                
-                ward_text = f"Ward: {w['ward_name']} (ID: {ward_id})\n"
-                if forecast:
-                    ward_text += f"  - Current AQI: {forecast.get('current_aqi')} (equivalent to smoking {forecast.get('cigarette_equivalent')} cigarettes/day)\n"
-                    hourly = forecast.get("hourly", [])
-                    if hourly:
-                        ward_text += f"  - 24h Forecast AQI: {hourly[-1]['aqi']}\n"
-                if blame:
-                    ward_text += f"  - Primary Source: {blame.get('explanation')}\n"
-                    factors_str = ", ".join([f"{f['name']}: {f['percentage']}% ({f['icon']})" for f in blame.get("factors", [])])
-                    ward_text += f"  - Factors: {factors_str}\n"
-                matched_wards_info.append(ward_text)
+    for w in _match_wards(query, overview or []):
+        ward_id = w["ward_id"]
+        forecast = get_ward_forecast(ward_id, hours=24)
+        blame = get_ward_blame(ward_id)
+
+        ward_text = f"Ward: {w['ward_name']} (ID: {ward_id})\n"
+        if forecast:
+            ward_text += f"  - Current AQI: {forecast.get('current_aqi')} (equivalent to smoking {forecast.get('cigarette_equivalent')} cigarettes/day)\n"
+            hourly = forecast.get("hourly", [])
+            if hourly:
+                ward_text += f"  - 24h Forecast AQI: {hourly[-1]['aqi']}\n"
+        if blame:
+            ward_text += f"  - Primary Source: {blame.get('explanation')}\n"
+            factors_str = ", ".join([f"{f['name']}: {f['percentage']}% ({f['icon']})" for f in blame.get("factors", [])])
+            ward_text += f"  - Factors: {factors_str}\n"
+        matched_wards_info.append(ward_text)
 
     matched_wards_text = "\n".join(matched_wards_info) if matched_wards_info else "No specific ward matched in the query."
 
     payload = (
+        "=== Data Provenance ===\n"
+        f"{_provenance(meta)}\n\n"
         "=== Delhi City Summary ===\n"
         f"{overview_text}\n"
         "=== Active Enforcement Tickets ===\n"
@@ -150,7 +247,8 @@ Use the following live context to answer the user's query:
 {context}
 
 Guidelines:
-1. Always base your answers on the provided live context. If the user asks about a specific ward and it is present in the context, use those specific numbers.
+1. Always base your answers on the provided live context. If the user asks about a specific ward and it is present in the context, use those specific numbers. Never invent readings, forecasts or safe time windows that are not in the context.
+2a. Mention when the data was observed. If the provenance section marks the data as sample or stale, say so clearly in your answer.
 2. If the user asks about health impacts, represent it using the "cigarette equivalent" metric (e.g. smoking X cigarettes a day) if available.
 3. Be concise, professional, and helpful.
 4. Keep the conversation history in mind.
@@ -202,11 +300,11 @@ class AtmosChatbotService:
 
     @classmethod
     async def chat_stream(cls, message: str, language: str, conversation_id: str, force_rag: bool = False) -> AsyncGenerator[str, None]:
-        sources = ["Forecast Data", "Blame Score Data"]
+        sources = _sources(get_data_source())
         use_mock = cls.should_use_mock(force_rag)
 
         if use_mock:
-            resp_text = _match_response(message, language)
+            resp_text = grounded_reply(message, language, reason="not_configured")
             # Stream response word by word
             words = resp_text.split(" ")
             for i, word in enumerate(words):
@@ -280,19 +378,24 @@ class AtmosChatbotService:
                 "sources": sources
             })
         except Exception as e:
-            yield json.dumps({
-                "error": str(e),
-                "conversation_id": conversation_id,
-                "done": True
-            })
+            print(f"LLM streaming failed: {e}")
+            if accumulated_response:
+                # Part of an answer was already sent; don't splice in a second one
+                yield json.dumps({"error": str(e), "conversation_id": conversation_id, "done": True})
+                return
+            reply_text = grounded_reply(message, language, reason="unavailable")
+            cls.save_message(conversation_id, "human", message)
+            cls.save_message(conversation_id, "ai", reply_text)
+            yield json.dumps({"text": reply_text, "conversation_id": conversation_id, "done": False})
+            yield json.dumps({"text": "", "conversation_id": conversation_id, "done": True, "sources": sources})
 
     @classmethod
     async def chat_non_stream(cls, message: str, language: str, conversation_id: str, force_rag: bool = False) -> dict:
-        sources = ["Forecast Data", "Blame Score Data"]
+        sources = _sources(get_data_source())
         use_mock = cls.should_use_mock(force_rag)
 
         if use_mock:
-            resp_text = _match_response(message, language)
+            resp_text = grounded_reply(message, language, reason="not_configured")
             cls.save_message(conversation_id, "human", message)
             cls.save_message(conversation_id, "ai", resp_text)
             return {
@@ -336,9 +439,9 @@ class AtmosChatbotService:
             })
             reply_text = response.content
         except Exception as e:
-            # Fallback to mock if LLM fails (e.g. invalid key, quota exceeded)
+            # Fall back to a summary of real snapshot data (e.g. invalid key, quota exceeded)
             print(f"LLM generation failed: {e}")
-            reply_text = _match_response(message, language)
+            reply_text = grounded_reply(message, language, reason="unavailable")
 
         cls.save_message(conversation_id, "human", message)
         cls.save_message(conversation_id, "ai", reply_text)

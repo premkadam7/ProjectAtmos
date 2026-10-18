@@ -44,8 +44,8 @@ def test_chat_non_stream_endpoint(client):
     assert response.status_code == 200
     data = response.json()
     assert data["language"] == "en"
-    assert "Rohini" in data["response"]
-    assert "245" in data["response"]
+    assert "Rohini: current AQI" in data["response"]
+    assert "245" not in data["response"]
 
 def test_chat_stream_endpoint_mock_mode(client):
     # Tests streaming route (Accept: text/event-stream) under mock mode
@@ -67,4 +67,41 @@ def test_chat_stream_endpoint_mock_mode(client):
     # Check that text segments are streamed and done is True at the end
     assert any(not e.get("done") and "Dwarka" in e.get("text", "") for e in events[:-1])
     assert events[-1]["done"] is True
-    assert "Forecast Data" in events[-1]["sources"]
+    assert any("Atmos forecast snapshot" in src for src in events[-1]["sources"])
+
+
+def test_context_includes_provenance():
+    context = build_context_payload("How is Rohini?")
+    assert "=== Data Provenance ===" in context
+    assert "freshness: sample" in context
+    assert "NOT current conditions" in context
+
+
+def test_provider_failure_falls_back_to_snapshot_data(client, monkeypatch):
+    """A failing Gemini call must answer from real data, never canned numbers."""
+    from langchain_core.runnables import RunnableLambda
+    import services.chatbot as chatbot
+
+    def failing_llm(**kwargs):
+        def fail(_):
+            raise RuntimeError("quota exceeded")
+        return RunnableLambda(fail)
+
+    monkeypatch.setattr(chatbot, "ChatGoogleGenerativeAI", failing_llm)
+    monkeypatch.setattr(AtmosChatbotService, "should_use_mock", classmethod(lambda cls, force_rag=False: False))
+
+    data = client.post("/api/chat", json={"message": "What is Delhi's average AQI?", "language": "en"}).json()
+    assert data["response"].startswith("The AI assistant is unavailable right now.")
+    avg = round(client.get("/api/forecast/delhi").json()["city_avg_aqi"])
+    assert f"Delhi's average AQI is {avg}" in data["response"]
+
+    # Streaming takes the same fallback when the provider fails before any text
+    events = []
+    with client.stream("POST", "/api/chat", json={"message": "Tell me about Rohini", "language": "en"},
+                       headers={"Accept": "text/event-stream"}) as resp:
+        for line in resp.iter_lines():
+            if line.startswith("data: "):
+                events.append(json.loads(line[6:]))
+    text = "".join(e.get("text", "") for e in events)
+    assert "Rohini: current AQI" in text
+    assert events[-1]["done"] is True and "error" not in events[-1]

@@ -100,7 +100,7 @@ All 67 tests cover happy paths, boundary conditions, integration flows, latency 
 - **Vulnerability Overlay** — Maps schools, hospitals, and elderly care centers (fetched from OpenStreetMap) against pollution hotspots
 - **Atmos Assistant** — Gemini-powered RAG chatbot that injects live forecast data, blame scores, and enforcement tickets into the prompt. Supports English and Hindi queries
 - **Prediction Map** — Inverse-distance-weighted interpolation fills all 290 wards from the 29 stations; a timeline lets you play or scrub the forecast from now to +72h across the city
-- **Historical Data** — Measured hourly PM2.5, PM10, NO₂, SO₂, CO and O₃ for the last 30 days, city-wide or per ward
+- **Historical Data** — Hourly PM2.5, PM10, NO₂, SO₂, CO and O₃ for the last 30 days, city-wide or per ward. These are CAMS model estimates at station locations, not station measurements, and are never rescaled by later calibrations
 
 ## API Endpoints
 
@@ -109,7 +109,7 @@ All 67 tests cover happy paths, boundary conditions, integration flows, latency 
 | GET | `/api/forecast/{city}` | City overview with all ward forecasts |
 | GET | `/api/forecast/{city}/timeline` | Hourly predicted AQI for every ward (drives the map timeline) |
 | GET | `/api/forecast/{city}/{ward_id}` | Detailed 72h forecast for one ward |
-| GET | `/api/history/{city}` | Measured hourly pollutant history (`?ward_id=`, `?hours=`) |
+| GET | `/api/history/{city}` | Modelled (CAMS) hourly pollutant history (`?ward_id=`, `?hours=`) |
 | GET | `/api/blame/{city}/{ward_id}` | SHAP attribution breakdown |
 | GET | `/api/enforce/{city}` | Auto-generated enforcement tickets |
 | GET | `/api/vulnerable/{city}` | Schools, hospitals, elderly care centers |

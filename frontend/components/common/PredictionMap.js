@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import {
   aqiRampColor, getAqiColor, getAqiLabel, idw, loadWardGeometry, formatHourLabel,
 } from '@/lib/aqi';
+import { getVulnerable } from '@/lib/api';
 
 const DELHI_CENTER = [28.6139, 77.209];
 const PLAY_INTERVAL_MS = 350;
@@ -82,6 +83,7 @@ export default function PredictionMap({
   const [hover, setHover] = useState(null);
   const [zoom, setZoom] = useState(11);
   const [vulnData, setVulnData] = useState([]);
+  const [vulnNote, setVulnNote] = useState(null);
   const [showVuln, setShowVuln] = useState({ hospital: true, school: true, elderly_care: false });
   const light = useSyncExternalStore(subscribeTheme, isLightTheme, () => false);
   const geoRef = useRef(null);
@@ -95,11 +97,12 @@ export default function PredictionMap({
 
   useEffect(() => {
     if (!showVulnerable) return;
-    fetch('/data/vulnerable_locations.geojson')
-      .then((r) => r.json())
-      .then((data) => setVulnData(data.features.map((f) => ({
-        lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], ...f.properties,
-      }))))
+    // Same dataset the enforcement counts use, with per-record provenance
+    getVulnerable('delhi')
+      .then((data) => {
+        setVulnData(data.locations ?? []);
+        setVulnNote(data.data_note ?? null);
+      })
       .catch(() => {});
   }, [showVulnerable]);
 
@@ -221,9 +224,15 @@ export default function PredictionMap({
             key={`v${i}`}
             center={[v.lat, v.lon]}
             radius={4}
-            pathOptions={{ fillColor: VULN_CONFIG[v.type]?.color, color: '#fff', weight: 1, fillOpacity: 0.95 }}
+            pathOptions={v.verified
+              ? { fillColor: VULN_CONFIG[v.type]?.color, color: '#fff', weight: 1, fillOpacity: 0.95 }
+              : { fillColor: VULN_CONFIG[v.type]?.color, color: VULN_CONFIG[v.type]?.color, weight: 1, fillOpacity: 0.25, dashArray: '2 2' }}
           >
-            <Tooltip>{v.name} · {v.ward_name}</Tooltip>
+            <Tooltip>
+              {v.verified
+                ? <>{v.name} · {v.ward_name}</>
+                : <>Synthetic placeholder ({VULN_CONFIG[v.type]?.label.toLowerCase()}), not a real facility</>}
+            </Tooltip>
           </CircleMarker>
         ))}
 
@@ -273,6 +282,7 @@ export default function PredictionMap({
                 <span className="dot" />{cfg.label}
               </button>
             ))}
+            {vulnNote && <p className="pmap-vuln-note">{vulnNote}</p>}
           </div>
         )}
       </div>
