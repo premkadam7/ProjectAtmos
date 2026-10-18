@@ -395,13 +395,12 @@ def assemble_snapshot(raw, stations, now, calib, source, source_detail, ground_c
             "hourly": hourly,
         })
 
-    # History (observed side only), calibrated to ground level for PM
+    # History up to now: CAMS model estimates exactly as received. Today's
+    # calibration ratio is not applied backwards, so past values never change
+    # with later calibrations and are never presented as measurements.
     hist = raw[raw["timestamp"] <= now][["timestamp", "station", *POLLUTANTS]].copy()
-    hist = hist.merge(calib[["ratio_pm25", "ratio_pm10"]], left_on="station", right_index=True)
-    hist["pm25"] = hist["pm25"] * hist["ratio_pm25"]
-    hist["pm10"] = hist["pm10"] * hist["ratio_pm10"]
     hist["aqi"] = hist["pm25"].apply(calculate_aqi_from_pm25)
-    hist = hist.drop(columns=["ratio_pm25", "ratio_pm10"]).merge(
+    hist = hist.merge(
         stations[["station", "ward_id"]], on="station"
     )
 

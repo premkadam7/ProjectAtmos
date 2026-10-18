@@ -386,7 +386,7 @@ function CigaretteCard({ cigarettes, pm25, animOrder = 0 }) {
   );
 }
 
-/* ---------- Pollutants: latest measured values vs CPCB limits ---------- */
+/* ---------- Pollutants: current values vs CPCB limits ---------- */
 // CPCB National Ambient Air Quality Standards (24h, or 8h for CO/O3)
 const POLLUTANTS = [
   { key: 'pm25', name: 'PM2.5', unit: 'µg/m³', limit: 60 },
@@ -397,11 +397,11 @@ const POLLUTANTS = [
   { key: 'o3', name: 'O₃', unit: 'µg/m³', limit: 100 },
 ];
 
-function TopPollutantsCard({ latest, animOrder = 0 }) {
+function TopPollutantsCard({ latest, calibrated, animOrder = 0 }) {
   return (
     <Card
       title="Pollutants vs safe limit"
-      action={<span className="chip-muted">CPCB standard</span>}
+      action={<span className="chip-muted">{calibrated ? 'PM: CPCB-calibrated · gases: CAMS model' : 'CAMS model estimates'}</span>}
       className="stagger-in"
       style={{ flex: 1, animationDelay: `${animOrder * 0.08}s` }}
     >
@@ -428,7 +428,10 @@ function TopPollutantsCard({ latest, animOrder = 0 }) {
               </div>
             );
           })}
-          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Bar marker = safe limit (1×). Scale shows up to 3× the limit.</p>
+          <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+            Latest hourly value compared with the CPCB 24-hour standard (8-hour for CO and O₃), so this is indicative.
+            Bar marker = limit (1×); scale shows up to 3×.
+          </p>
         </div>
       )}
     </Card>
@@ -499,7 +502,7 @@ function HistoricalCard({ history, animOrder = 0 }) {
   return (
     <Card
       title="Historical air quality"
-      action={<span className="chip-muted">{history?.data_source === 'live' ? 'Ground-calibrated' : 'Measured'}</span>}
+      action={<span className="chip-muted" title={history?.series_description}>Modelled (CAMS)</span>}
       className="stagger-in"
       style={{ animationDelay: `${animOrder * 0.08}s` }}
     >
@@ -537,6 +540,10 @@ function HistoricalCard({ history, animOrder = 0 }) {
             <p style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', marginTop: '4px' }}>
               {fullLabel(series[0].date)} — {fullLabel(series[series.length - 1].date)}
               {available < hours && ` · ${Math.round(available / 24)} days available`}
+            </p>
+            <p style={{ fontSize: '11px', color: 'var(--text-dim)', textAlign: 'center', marginTop: '2px' }}>
+              Satellite-model (CAMS) estimates at station locations, not station measurements. The current
+              readings above are calibrated to CPCB stations when live, so they can differ.
             </p>
             <div style={{ display: 'flex', gap: '24px', marginTop: '16px' }}>
               <div>
@@ -627,7 +634,15 @@ export default function Home() {
   }, [selectedWard]);
 
   const wardDetail = detail.wardId === selectedWard?.ward_id ? detail.data : null;
-  const latest = history?.series?.[history.series.length - 1];
+  // Current PM comes from the per-ward current values (CPCB-calibrated when live);
+  // gases are only available from the CAMS model history.
+  const latestModelled = history?.series?.[history.series.length - 1];
+  const meanOf = (key) => (wards.length ? wards.reduce((s, w) => s + (w[key] ?? 0), 0) / wards.length : null);
+  const currentPm25 = meanOf('current_pm25');
+  const currentPm10 = meanOf('current_pm10');
+  const latest = latestModelled && currentPm25 != null
+    ? { ...latestModelled, pm25: currentPm25, pm10: currentPm10 }
+    : null;
 
   if (error) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: 'var(--text-dim)', flexDirection: 'column', gap: '10px' }}>
@@ -637,8 +652,8 @@ export default function Home() {
   );
 
   const cityAqi = data ? Math.round(data.city_avg_aqi) : null;
-  const cityPm25 = latest ? Math.round(latest.pm25) : null;
-  const cityPm10 = latest ? Math.round(latest.pm10) : null;
+  const cityPm25 = currentPm25 != null ? Math.round(currentPm25) : null;
+  const cityPm10 = currentPm10 != null ? Math.round(currentPm10) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -692,7 +707,7 @@ export default function Home() {
         {cityPm25 != null ? (
           <CigaretteCard cigarettes={(cityPm25 / 22).toFixed(1)} pm25={cityPm25} animOrder={2} />
         ) : <Skeleton height={340} style={{ flex: 1 }} />}
-        <TopPollutantsCard latest={latest} animOrder={3} />
+        <TopPollutantsCard latest={latest} calibrated={data?.data_source === 'live'} animOrder={3} />
       </div>
 
       <HistoricalCard history={history} animOrder={4} />

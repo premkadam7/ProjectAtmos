@@ -69,8 +69,15 @@ def get_ward_forecast(ward_id: str, hours: int = 72):
     }
 
 
+HISTORY_SERIES_INFO = {
+    "kind": "modelled",
+    "description": "CAMS atmospheric model estimates (via Open-Meteo) at station locations, "
+                   "not station measurements and not calibrated to CPCB readings",
+}
+
+
 def get_history(ward_id: str = None, hours: int = 24 * 30):
-    """Hourly observed pollutant history for one ward, or the city mean when ward_id is None."""
+    """Hourly modelled pollutant history for one ward, or the city mean when ward_id is None."""
     hist = get_snapshot()["history"]
     if ward_id:
         hist = hist[hist["ward_id"] == ward_id]

@@ -177,3 +177,30 @@ def test_repeated_refresh_failure_keeps_data_but_reports_stale(monkeypatch):
 def test_api_reports_freshness(client):
     data = client.get("/api/forecast/delhi").json()
     assert data["freshness"]["status"] == "sample"
+
+
+# ── History provenance (F06) ─────────────────────────────────────────────────
+
+def test_changing_calibration_never_rewrites_history(fake_http, monkeypatch):
+    first = lp.build_live_snapshot()
+    real_fetch = lp.fetch_ground_stations
+
+    def halved(token):
+        g = real_fetch(token)
+        g["pm25"] = g["pm25"] * 0.5
+        return g
+    monkeypatch.setattr(lp, "fetch_ground_stations", halved)
+    second = lp.build_live_snapshot()
+
+    # Current values follow the new ground readings...
+    a = {w["ward_name"]: w["current_pm25"] for w in first["wards"]}
+    b = {w["ward_name"]: w["current_pm25"] for w in second["wards"]}
+    assert b["Anand Vihar"] < a["Anand Vihar"] * 0.7
+    # ...but the stored history is the raw model series, unchanged
+    pd.testing.assert_frame_equal(first["history"], second["history"])
+
+
+def test_history_is_labelled_modelled(client):
+    data = client.get("/api/history/delhi?hours=24").json()
+    assert data["series_kind"] == "modelled"
+    assert "not station measurements" in data["series_description"]
